@@ -103,7 +103,7 @@ def get_user(uid):
     if not res:
         initial_token = secrets.token_hex(4).upper()
         c.execute("INSERT INTO users (user_id, signals_left, secret_token) VALUES (?, 10, ?)", (uid, 10, initial_token))
-        conn.commit()
+
         res = ('ar', 10, 0.0, initial_token, 0, None, None)
     c.execute("INSERT INTO users (user_id, signals_left, secret_token) VALUES (?, 10, ?)", (uid, 10, initial_token))
     conn.close()
