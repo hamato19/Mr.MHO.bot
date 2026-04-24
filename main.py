@@ -9,17 +9,22 @@ from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, Callback
 import requests
 from cryptography.fernet import Fernet
 
-# --- ⚙️ الإعدادات الأساسية ---
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # ضع توكن بوتك هنا
+# --- ⚙️ الإعدادات الأساسية (سحب البيانات من Render) ---
+# يتم سحب التوكن من خانة Environment Variables التي أسميتها BOT_TOKEN في الصورة
+BOT_TOKEN = os.getenv('BOT_TOKEN')
 DB_NAME = "elias_hook.db"
 
 # --- 🔐 إعداد نظام التشفير الاحترافي ---
-# نحاول سحب المفتاح من بيئة التشغيل، وإذا لم يوجد نولد واحد (للأمان لا ترفعه على GitHub)
+# سحب مفتاح التشفير من Render، وفي حال عدم وجوده نستخدم مفتاحاً عشوائياً (لحماية البيانات المشفرة)
 env_key = os.getenv('ELIAS_SECRET_KEY')
 if not env_key:
-    # توليد مفتاح افتراضي للتجربة (في الإنتاج يجب تثبيته في متغيرات البيئة)
+    # توليد مفتاح افتراضي إذا لم يتم ضبطه في المتغيرات
     env_key = Fernet.generate_key().decode()
     logging.warning("⚠️ لم يتم العثور على ELIAS_SECRET_KEY، تم استخدام مفتاح مؤقت.")
+
+if not BOT_TOKEN:
+    logging.error("❌ خطأ فادح: BOT_TOKEN غير موجود في إعدادات السيرفر!")
+    raise ValueError("يجب ضبط BOT_TOKEN في Environment Variables على Render")
 
 cipher_suite = Fernet(env_key.encode())
 
@@ -95,8 +100,9 @@ def handle_buttons(update: Update, context: CallbackContext):
         res = c.fetchone()
         conn.close()
         token = res[0] if res else "لم يتم التوليد"
-        # استبدل الدومين برابط استضافتك الثابت
-        url = f"https://your-app.koyeb.app/webhook/{user_id}?secret={token}"
+        # يتم سحب رابط التطبيق آلياً من Render أو وضعه يدوياً
+        app_url = os.getenv('RENDER_EXTERNAL_URL', 'https://your-app.onrender.com')
+        url = f"{app_url}/webhook/{user_id}?secret={token}"
         query.edit_message_text(f"🌐 <b>رابط الويبهوك الخاص بك:</b>\n<code>{url}</code>", parse_mode=ParseMode.HTML)
 
     elif query.data == 'tog_algo':
@@ -111,7 +117,6 @@ def handle_buttons(update: Update, context: CallbackContext):
         state = "✅ مفعل" if new_val == 1 else "❌ معطل"
         query.edit_message_text(f"🚀 التداول الآلي الآن: {state}")
 
-# معالجة الرسائل لحفظ المفاتيح مشفرة
 def handle_msg(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     txt = update.message.text
@@ -176,7 +181,8 @@ def hook_in(uid):
 
 # --- 🚀 التشغيل ---
 def start_flask():
-    app.run(host='0.0.0.0', port=8080)
+    # بورت 8080 هو البورت الافتراضي الذي يستخدمه Render
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
 
 if __name__ == '__main__':
     init_db()
