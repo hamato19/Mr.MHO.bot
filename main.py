@@ -105,8 +105,7 @@ def get_user(uid):
         c.execute("INSERT INTO users (user_id, signals_left, secret_token) VALUES (?, 10, ?)", (uid, 10, initial_token))
         conn.commit()
         res = ('ar', 10, 0.0, initial_token, 0, None, None)
-    c.execute("SELECT COUNT(*) FROM entities WHERE user_id = ?", (uid,))
-    chans = c.fetchone()[0]
+    c.execute("INSERT INTO users (user_id, signals_left, secret_token) VALUES (?, 10, ?)", (uid, 10, initial_token))
     conn.close()
     return {'lang': res[0], 'sigs': res[1], 'paid': res[2], 'token': res[3], 'algo': res[4], 'key': res[5], 'sec': res[6], 'chans': chans}
 
