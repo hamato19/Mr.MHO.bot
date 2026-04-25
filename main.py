@@ -50,26 +50,39 @@ async def get_main_menu():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+# --- معالج الرسائل النصية ---
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get('waiting_for_order'):
+        uid = update.effective_user.id
+        order_no = update.message.text
+        admin_id = 8711658382 # الآي دي الخاص بك كما ظهر في قاعدة البيانات
+        
+        try:
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=f"🚨 <b>طلب تفعيل جديد!</b>\n\n👤 المستخدم: <code>{uid}</code>\n🔢 رقم الطلب: <code>{order_no}</code>",
+                parse_mode=ParseMode.HTML
+            )
+            await update.message.reply_text("✅ تم استلام رقم الطلب وإرساله للإدارة. سيتم تفعيل حسابك فور التأكد.")
+        except:
+            await update.message.reply_text("✅ تم استلام رقم الطلب، جاري مراجعته.")
+            
+        context.user_data['waiting_for_order'] = False
+
 # --- معالج الأزرار ---
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     uid = update.effective_user.id
     u = await get_user_data(uid)
-# --- إضافة كود زر حسابي هنا ---
-        if query.data == 'acc':
-        # 1. جلب بيانات المستخدم
-        u = await get_user_data(uid)
-        
-        # 2. الاتصال بقاعدة البيانات (تأكد أن السطور التالية تبدأ من نفس العمود)
+    
+    if query.data == 'acc':
         conn = get_db()
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM entities WHERE user_id = %s", (uid,))
         channels_count = cur.fetchone()[0]
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
 
-        # 3. صياغة الرسالة
         account_msg = (
             f"👤 <b>معلومات حسابك الشخصي</b>\n"
             f"━━━━━━━━━━━━━━━\n"
@@ -80,33 +93,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💰 <b>إجمالي المدفوع:</b> ${u.get('total_paid', 0.00):.2f}\n"
             f"━━━━━━━━━━━━━━━"
         )
-        
-        await query.edit_message_text(
-            text=account_msg,
-            parse_mode=ParseMode.HTML,
-            reply_markup=await get_main_menu()
-        )
+        await query.edit_message_text(text=account_msg, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
 
-            elif query.data == 'buy':
-        # أزرار خيارات الاشتراك
+    elif query.data == 'buy':
         keyboard = [
             [InlineKeyboardButton("💳 إرسال رقم الطلب", callback_data='submit_order')],
-            [InlineKeyboardButton("👨‍💻 التواصل مع الدعم للطلب", url='https://t.me/YOUR_ADMIN_USERNAME')],
-            [InlineKeyboardButton("🔙 العودة للرئيسية", callback_data='back_home')]
+            [InlineKeyboardButton("👨‍💻 التواصل مع الدعم", url='https://t.me/YOUR_ADMIN_USERNAME')],
+            [InlineKeyboardButton("🔙 العودة", callback_data='back_home')]
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
         await query.edit_message_text(
-            "🛒 <b>قسم تفعيل الاشتراك</b>\n\n"
-            "يمكنك تفعيل اشتراكك بإحدى الطريقتين:\n"
-            "1️⃣ إذا كان لديك رقم طلب سابق، اضغط على <b>إرسال رقم الطلب</b>.\n"
-            "2️⃣ للطلب الجديد أو الاستفسار، اضغط على <b>التواصل مع الدعم</b> وسيتم تحويلك للمسؤول.",
-            parse_mode=ParseMode.HTML,
-            reply_markup=reply_markup
+            "🛒 <b>قسم تفعيل الاشتراك</b>\n\nاضغط على الزر أدناه لإرسال رقم الطلب أو تواصل مع الدعم.",
+            parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    if query.data == 'url':
-        # التحقق من Neon: هل توجد قنوات؟
+    elif query.data == 'submit_order':
+        await query.edit_message_text("📝 فضلاً، قم بإرسال <b>رقم الطلب</b> في رسالة نصية الآن.", parse_mode=ParseMode.HTML)
+        context.user_data['waiting_for_order'] = True
+
+    elif query.data == 'url':
         conn = get_db(); cur = conn.cursor()
         cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (uid,))
         has_entity = cur.fetchone()
@@ -117,7 +121,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(f"🌐 <b>رابط الويب هوك الخاص بك:</b>\n\n<code>{webhook_url}</code>", 
                                           parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
         else:
-            await query.edit_message_text("⚠️ <b>تنبيه:</b> يجب ربط قناة أو مجموعة أولاً لتفعيل الويب هوك.", 
+            await query.edit_message_text("⚠️ يجب ربط قناة أو مجموعة أولاً لتفعيل الويب هوك.", 
                                           reply_markup=await get_main_menu())
 
     elif query.data in ['add_channel', 'add_group']:
@@ -134,6 +138,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         msg = "📺 <b>قنواتك المربوطة:</b>\n\n" + "\n".join([f"🔹 {r[0]} | Tag: {r[1]}" for r in rows]) if rows else "❌ لا توجد قنوات."
         await query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
+
+    elif query.data == 'back_home':
+        await query.edit_message_text("مرحباً بك في لوحة تحكم Mr.MOH 🤖", reply_markup=await get_main_menu())
 
 # --- حفظ بيانات الربط ---
 async def handle_entity_shared(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -165,4 +172,5 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(MessageHandler(filters.StatusUpdate.CHAT_SHARED, handle_entity_shared))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.run_polling()
