@@ -43,51 +43,42 @@ def init_db():
     conn.commit(); c.close(); conn.close()
 
 # --- جلب بيانات المستخدم وتوليد توكن ---
-async def get_user_data(uid):
-    user = {"user_id": uid, "lang": "ar"}
-    try:
-        conn = get_db()
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM users WHERE user_id = %s", (uid,))
-            result = cur.fetchone()
-            if not result:
-                token = secrets.token_hex(8)
-                cur.execute("INSERT INTO users (user_id, secret_token) VALUES (%s, %s)", (uid, token))
-                conn.commit()
-                user = {"user_id": uid, "secret_token": token, "lang": "ar"}
-            else:
-                user = result
-        conn.close()
-    except Exception as e:
-        logging.error(f"DB Error: {e}")
-    return user
-
-# --- القائمة الرئيسية (فتح واجهة القنوات الخارجية) ---
 async def get_main_menu(u):
-    # نطلب من تيليجرام فتح واجهة اختيار القنوات والمجموعات
-    # جعل bot_is_member=False يسمح للمستخدم باختيار قناة ليس البوت فيها بعد ليضيفه
+    # أزرار الكيبورد السفلي (التي تفتح قائمة القنوات الخارجية)
     reply_kb = ReplyKeyboardMarkup([
         [
-            KeyboardButton("📢 إضافة قناة", request_chat=KeyboardButtonRequestChat(
-                request_id=1, 
-                chat_is_channel=True,
-                bot_is_member=False 
-            )),
-            KeyboardButton("💬 إضافة مجموعة", request_chat=KeyboardButtonRequestChat(
-                request_id=2, 
-                chat_is_channel=False,
-                bot_is_member=False
-            ))
+            KeyboardButton("📢 إضافة قناة", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True)),
+            KeyboardButton("💬 إضافة مجموعة", request_chat=KeyboardButtonRequestChat(request_id=2, chat_is_channel=False))
         ]
     ], resize_keyboard=True)
 
+    # أزرار لوحة التحكم (التي تظهر تحت الرسالة) - منسقة زرين في كل صف
     inline_kb = [
-        [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🛒 تفعيل الاشتراك", callback_data='buy')],
-        [InlineKeyboardButton("🔄 توليد رمز أمان", callback_data='gen_token'), InlineKeyboardButton("🌐 رابط الويب هوك", callback_data='url')],
+        [
+            InlineKeyboardButton("👤 حسابي", callback_data='acc'),
+            InlineKeyboardButton("🛒 تفعيل الاشتراك", callback_data='buy')
+        ],
+        [
+            InlineKeyboardButton("📺 قنواتي", callback_data='acc'),
+            InlineKeyboardButton("📢 إضافة قناة", callback_data='info')
+        ],
+        [
+            InlineKeyboardButton("💬 إضافة مجموعة", callback_data='info'),
+            InlineKeyboardButton("❌ إزالة قناة/مجموعة", callback_data='acc')
+        ],
+        [
+            InlineKeyboardButton("🔄 توليد رمز أمان", callback_data='gen_token'),
+            InlineKeyboardButton("🌐 رابط الويب هوك", callback_data='url')
+        ],
+        [
+            InlineKeyboardButton("▶️ طريقة الاستخدام", callback_data='help'),
+            InlineKeyboardButton("🌍 تغيير اللغة", callback_data='lang')
+        ],
         [InlineKeyboardButton("🚀 التداول الآلي 🤖", callback_data='alpaca')],
         [InlineKeyboardButton("☎️ الدعم", callback_data='support')]
     ]
     return reply_kb, InlineKeyboardMarkup(inline_kb)
+
 
 # --- معالجة اختيار القناة وربطها ---
 async def handle_entity_shared(update: Update, context: ContextTypes.DEFAULT_TYPE):
