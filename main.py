@@ -26,10 +26,12 @@ def get_db_connection():
 
 def init_db():
     conn = get_db_connection(); c = conn.cursor()
+    # تأكد من تطابق الأعمدة مع الكود
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (user_id BIGINT PRIMARY KEY, secret_token TEXT, lang TEXT DEFAULT 'ar',
                   signals_left INTEGER DEFAULT 10, total_paid REAL DEFAULT 0.0,
-                  expiry_days INTEGER DEFAULT 0, state TEXT DEFAULT 'IDLE')''')
+                  expiry_days INTEGER DEFAULT 0, state TEXT DEFAULT 'IDLE',
+                  alpaca_key TEXT, alpaca_secret TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS entities 
                  (id SERIAL PRIMARY KEY, user_id BIGINT, 
                   entity_id TEXT UNIQUE, entity_name TEXT)''')
@@ -72,7 +74,7 @@ STRINGS = {
 
 # --- ⌨️ لوحة التحكم ---
 def get_main_keyboard(u):
-    lang = u['lang']
+    lang = u.get('lang', 'ar')
     kb = [
         [InlineKeyboardButton("👤 " + ("حسابي" if lang=='ar' else "Account"), callback_data='acc'),
          InlineKeyboardButton("📊 " + ("عرض الشارات" if lang=='ar' else "Live Charts"), web_app=WebAppInfo(url=f"{RENDER_URL}/chart"))],
@@ -87,6 +89,10 @@ def get_main_keyboard(u):
     return InlineKeyboardMarkup(kb)
 
 # --- 🤖 معالجات البوت ---
+
+def start(update: Update, context: CallbackContext):
+    u = get_user_data(update.effective_user.id)
+    update.message.reply_text(STRINGS[u['lang']]['start'], reply_markup=get_main_keyboard(u), parse_mode=ParseMode.HTML)
 
 def handle_callbacks(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -111,14 +117,14 @@ def handle_callbacks(update: Update, context: CallbackContext):
             query.edit_message_text(STRINGS[lang]['no_chan'], reply_markup=get_main_keyboard(u))
         else:
             url = f"{RENDER_URL}/webhook/{u['secret_token']}"
-            bot.send_message(uid, f"🌐 <b>الويب هوك الخاص بك:</b>\n<code>{url}</code>", parse_mode=ParseMode.HTML)
+            context.bot.send_message(uid, f"🌐 <b>الويب هوك الخاص بك:</b>\n<code>{url}</code>", parse_mode=ParseMode.HTML)
 
     elif query.data == 'gen_token':
         new_token = secrets.token_urlsafe(16).upper()
         conn = get_db_connection(); c = conn.cursor()
         c.execute("UPDATE users SET secret_token=%s WHERE user_id=%s", (new_token, uid)); conn.commit(); c.close(); conn.close()
         url = f"{RENDER_URL}/webhook/{new_token}"
-        bot.send_message(uid, f"🔄 <b>تم تجديد الرابط بنجاح:</b>\n<code>{url}</code>", parse_mode=ParseMode.HTML)
+        context.bot.send_message(uid, f"🔄 <b>تم تجديد الرابط بنجاح:</b>\n<code>{url}</code>", parse_mode=ParseMode.HTML)
 
     elif query.data == 'alpaca_analyze':
         conn = get_db_connection(); c = conn.cursor()
@@ -128,16 +134,15 @@ def handle_callbacks(update: Update, context: CallbackContext):
 def handle_text(update: Update, context: CallbackContext):
     uid = update.effective_user.id
     u = get_user_data(uid)
-    if u['state'] == 'AWAIT_STOCK':
+    if u.get('state') == 'AWAIT_STOCK':
         symbol = update.message.text.upper()
-        # Alpaca API Call (Analysis Only)
         headers = {'APCA-API-KEY-ID': ALPACA_KEY, 'APCA-API-SECRET-KEY': ALPACA_SECRET}
         resp = requests.get(f"https://data.alpaca.markets/v2/stocks/{symbol}/quotes/latest", headers=headers)
         if resp.status_code == 200:
-            price = resp.json()['quote']['ap']
+            price = resp.json().get('quote', {}).get('ap', 'N/A')
             update.message.reply_text(f"📊 <b>تحليل Alpaca لـ {symbol}:</b>\nالسعر الحالي: ${price}\nالحالة: متصل ✅", parse_mode=ParseMode.HTML)
         else:
-            update.message.reply_text("❌ لم يتم العثور على السهم.")
+            update.message.reply_text("❌ لم يتم العثور على السهم أو تأكد من إعدادات API.")
         conn = get_db_connection(); c = conn.cursor()
         c.execute("UPDATE users SET state='IDLE' WHERE user_id=%s", (uid,)); conn.commit(); c.close(); conn.close()
 
@@ -146,15 +151,15 @@ def track_new_channel(update: Update, context: CallbackContext):
         chat = update.my_chat_member.chat
         user_id = update.my_chat_member.from_user.id
         conn = get_db_connection(); c = conn.cursor()
-        c.execute("INSERT INTO entities (user_id, entity_id, entity_name) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING", (user_id, str(chat.id), chat.title))
+        c.execute("INSERT INTO entities (user_id, entity_id, entity_name) VALUES (%s, %s, %s) ON CONFLICT (entity_id) DO UPDATE SET entity_name=%s", (user_id, str(chat.id), chat.title, chat.title))
         conn.commit(); c.close(); conn.close()
         u = get_user_data(user_id)
-        bot.send_message(user_id, f"🔗 <b>تم ربط القناة بنجاح!</b>\nالرابط الخاص بك:\n<code>{RENDER_URL}/webhook/{u['secret_token']}</code>", parse_mode=ParseMode.HTML)
+        context.bot.send_message(user_id, f"🔗 <b>تم ربط القناة بنجاح!</b>\nالرابط الخاص بك:\n<code>{RENDER_URL}/webhook/{u['secret_token']}</code>", parse_mode=ParseMode.HTML)
 
 # --- 🕸 Flask Routes ---
 
 @app.route('/chart')
-def chart():
+def chart_page():
     return render_template_string('''
         <body style="margin:0; background:#131722;">
             <div id="tv" style="height:100vh;"></div>
@@ -172,27 +177,34 @@ def sub_page():
         </body>''')
 
 @app.route('/webhook/<token>', methods=['POST'])
-def webhook(token):
+def webhook_handler(token):
     conn = get_db_connection(); c = conn.cursor(cursor_factory=RealDictCursor)
     c.execute("SELECT user_id FROM users WHERE secret_token=%s", (token,))
     u = c.fetchone()
     if u:
         c.execute("SELECT entity_id FROM entities WHERE user_id=%s", (u['user_id'],))
         for row in c.fetchall():
-            bot.send_message(row['entity_id'], request.json.get('message', 'Signal!'), parse_mode=ParseMode.HTML)
+            msg = request.json.get('message', '🚀 Signal Received!')
+            bot.send_message(row['entity_id'], msg, parse_mode=ParseMode.HTML)
     c.close(); conn.close()
     return {"ok": True}
+
+@app.route('/')
+def home(): return "MOH Engine is Running"
 
 # --- 🚀 تشغيل ---
 if __name__ == '__main__':
     init_db()
     updater = Updater(BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
+    
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CallbackQueryHandler(handle_callbacks))
     dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
     dp.add_handler(ChatMemberHandler(track_new_channel, ChatMemberHandler.MY_CHAT_MEMBER))
     
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
-    updater.start_polling()
+    # تشغيل Flask في خيط منفصل
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080))), daemon=True).start()
+    
+    updater.start_polling(drop_pending_updates=True)
     updater.idle()
