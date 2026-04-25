@@ -59,8 +59,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- إضافة كود زر حسابي هنا ---
     if query.data == 'acc':
         # 1. جلب بيانات المستخدم الأساسية والاشتراك
-        u = await get_user_data(uid)
-        
+      u = await get_user_data(uid)  
         # 2. حساب عدد القنوات المربوطة من جدول entities في Neon
         conn = get_db()
         cur = conn.cursor()
@@ -86,6 +85,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.HTML,
             reply_markup=await get_main_menu()
         )
+            elif query.data == 'buy':
+        # أزرار خيارات الاشتراك
+        keyboard = [
+            [InlineKeyboardButton("💳 إرسال رقم الطلب", callback_data='submit_order')],
+            [InlineKeyboardButton("👨‍💻 التواصل مع الدعم للطلب", url='https://t.me/YOUR_ADMIN_USERNAME')],
+            [InlineKeyboardButton("🔙 العودة للرئيسية", callback_data='back_home')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "🛒 <b>قسم تفعيل الاشتراك</b>\n\n"
+            "يمكنك تفعيل اشتراكك بإحدى الطريقتين:\n"
+            "1️⃣ إذا كان لديك رقم طلب سابق، اضغط على <b>إرسال رقم الطلب</b>.\n"
+            "2️⃣ للطلب الجديد أو الاستفسار، اضغط على <b>التواصل مع الدعم</b> وسيتم تحويلك للمسؤول.",
+            parse_mode=ParseMode.HTML,
+            reply_markup=reply_markup
+        )
+
     if query.data == 'url':
         # التحقق من Neon: هل توجد قنوات؟
         conn = get_db(); cur = conn.cursor()
