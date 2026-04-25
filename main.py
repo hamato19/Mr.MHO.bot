@@ -37,7 +37,7 @@ async def get_user_data(uid):
         logging.error(f"DB Error: {e}")
         return None
 
-# --- اللوحة الرئيسية (تصميم الصورة 1) ---
+# --- اللوحة الرئيسية (تصميم الصورة) ---
 async def get_main_menu():
     keyboard = [
         [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🛒 تفعيل الاشتراك", callback_data='buy')],
@@ -50,6 +50,14 @@ async def get_main_menu():
         [InlineKeyboardButton("☎️ الدعم", url=f'tg://user?id={ADMIN_ID}')]
     ]
     return InlineKeyboardMarkup(keyboard)
+
+# --- النص الموحد للترحيب والعودة ---
+WELCOME_MSG = (
+    "👋 <b>أهلاً بك!</b>\n\n"
+    "🆔 يرجى اختيار أحد الخيارات من اللوحة أدناه.\n\n"
+    "⚠️ <b>تنبيه:</b> خدمة التداول الآلي لدينا تعمل فقط في القنوات، وليس في المجموعات.\n"
+    "⚠️ عند إضافة البوت إلى قناة أو مجموعة، تأكد من منحه جميع الصلاحيات لضمان عمله بشكل صحيح."
+)
 
 # --- معالجة الرسائل واستلام كود التفعيل ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -64,7 +72,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await update.message.reply_text("✅ تم استلام رقم الطلب وإرساله للإدارة. سيتم تفعيل حسابك فور التأكد.", reply_markup=await get_main_menu())
         except:
-            await update.message.reply_text("⚠️ حدث خطأ في التواصل مع الإدارة، لكن تم تسجيل طلبك.", reply_markup=await get_main_menu())
+            await update.message.reply_text("⚠️ حدث خطأ في إشعار الإدارة، لكن طلبك مسجل.", reply_markup=await get_main_menu())
         context.user_data['waiting_for_order'] = False
 
 # --- معالجة الأزرار ---
@@ -83,7 +91,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
 
     elif query.data == 'buy':
-        # تصميم زر تفعيل الاشتراك المحدث
+        # قسم الاشتراك المحدث
         keyboard = [
             [InlineKeyboardButton("🌐 للاشتراك اضغط هنا", url='https://servernet.ct.ws')],
             [InlineKeyboardButton("🔑 إرسال كود التفعيل", callback_data='submit_order')],
@@ -98,6 +106,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == 'submit_order':
         await query.edit_message_text("📝 <b>فضلاً، قم بكتابة كود التفعيل (رقم الطلب) الآن في رسالة:</b>", parse_mode=ParseMode.HTML)
         context.user_data['waiting_for_order'] = True
+
+    elif query.data == 'back':
+        # دالة العودة للقائمة مع رسالة الترحيب المحدثة
+        await query.edit_message_text(WELCOME_MSG, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
 
     elif query.data == 'del_entity':
         conn = get_db(); cur = conn.cursor()
@@ -116,7 +128,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = get_db(); cur = conn.cursor()
         cur.execute("DELETE FROM entities WHERE entity_id = %s AND user_id = %s", (eid, uid))
         conn.commit(); conn.close()
-        await query.edit_message_text(f"🗑 تم حذف الكيان بنجاح من قاعدة البيانات.", reply_markup=await get_main_menu())
+        await query.edit_message_text(f"🗑 تم الحذف بنجاح.", reply_markup=await get_main_menu())
 
     elif query.data == 'url':
         url = f"https://mr-mho-bot.onrender.com/webhook/{u['secret_token']}"
@@ -127,10 +139,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = get_db(); cur = conn.cursor()
         cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, uid))
         conn.commit(); conn.close()
-        await query.edit_message_text("✅ تم توليد رمز أمان جديد وتحديث الويب هوك.", reply_markup=await get_main_menu())
-
-    elif query.data == 'back':
-        await query.edit_message_text("مرحباً بك في لوحة تحكم Mr.MOH 🤖", reply_markup=await get_main_menu())
+        await query.edit_message_text("✅ تم تحديث رمز الأمان بنجاح.", reply_markup=await get_main_menu())
 
 # --- دوال الربط (Neon Integration) ---
 async def handle_entity_shared(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -143,11 +152,13 @@ async def handle_entity_shared(update: Update, context: ContextTypes.DEFAULT_TYP
     conn.commit(); conn.close()
     await update.message.reply_text(f"✅ تم ربط الكيان {eid} بنجاح!", reply_markup=await get_main_menu())
 
+# --- تحديث رسالة الترحيب الرئيسية ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("    "👋 <b>أهلاً بك!</b>\n\n"
-        "🆔 يرجى اختيار أحد الخيارات من اللوحة أدناه.\n\n"
-        "⚠️ <b>تنبيه:</b> خدمة التداول الآلي لدينا تعمل فقط في القنوات، وليس في المجموعات.\n"
-        "⚠️ عند إضافة البوت إلى قناة أو مجموعة، تأكد من منحه جميع الصلاحيات لضمان عمله بشكل", reply_markup=await get_main_menu())
+    await update.message.reply_text(
+        WELCOME_MSG, 
+        parse_mode=ParseMode.HTML, 
+        reply_markup=await get_main_menu()
+    )
 
 if __name__ == '__main__':
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=10000), daemon=True).start()
