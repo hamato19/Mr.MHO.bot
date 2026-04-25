@@ -123,9 +123,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
 
-    elif query.data == 'buy':
-        kb = [[InlineKeyboardButton("💳 إرسال رقم الطلب", callback_data='submit_order')], [InlineKeyboardButton("🔙 العودة", callback_data='back')]]
-        await query.edit_message_text("🛒 <b>قسم التفعيل</b>\nأرسل رقم الطلب للتفعيل الفوري:", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+        elif query.data == 'buy':
+        # أزرار قسم الاشتراك المحدثة
+        keyboard = [
+            [InlineKeyboardButton("🌐 للاشتراك اضغط هنا", url='https://servernet.ct.ws')],
+            [InlineKeyboardButton("🔑 إرسال كود التفعيل", callback_data='submit_order')],
+            [InlineKeyboardButton("📍 القائمة الرئيسية", callback_data='back')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.edit_message_text(
+            "<b>للاشتراك في البوت والاستمتاع بالتداول الآلي، يرجى زيارة موقعنا للحصول على باقات مميزة.</b>\n\n"
+            "إذا قمت بالاشتراك بالفعل ولديك كود التفعيل (رقم الطلب)، اضغط على الزر أدناه لإرساله.",
+            parse_mode=ParseMode.HTML,
+            reply_markup=reply_markup
+        )
+
+    elif query.data == 'submit_order':
+        # البدء في استقبال كود التفعيل من المستخدم
+        await query.edit_message_text(
+            "📝 <b>فضلاً، قم بكتابة كود التفعيل (رقم الطلب) الآن:</b>",
+            parse_mode=ParseMode.HTML
+        )
+        context.user_data['waiting_for_order'] = True
 
     elif query.data == 'submit_order':
         await query.edit_message_text("📝 أرسل <b>رقم الطلب</b> الآن في رسالة نصية:", parse_mode=ParseMode.HTML)
