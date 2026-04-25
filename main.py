@@ -4,21 +4,23 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import secrets
 import threading
+import requests
 from flask import Flask, request, render_template_string
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ParseMode, Bot, WebAppInfo
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, MessageHandler, Filters, ChatMemberHandler
 
-# --- ⚙️ الإعدادات الأساسية ---
+# --- ⚙️ الإعدادات (Environment) ---
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 DB_URL = os.getenv('DATABASE_URL')
-RENDER_URL = os.getenv('RENDER_EXTERNAL_URL', 'https://your-app.onrender.com')
-ADMIN_ID = int(os.getenv('ADMIN_ID', '0'))
+RENDER_URL = os.getenv('RENDER_EXTERNAL_URL', 'https://mr-mho-bot.onrender.com')
+ALPACA_KEY = os.getenv('ALPACA_API_KEY')
+ALPACA_SECRET = os.getenv('ALPACA_SECRET_KEY')
 
 app = Flask(__name__)
 bot = Bot(token=BOT_TOKEN)
 logging.basicConfig(level=logging.INFO)
 
-# --- 🛠 إدارة قاعدة البيانات ---
+# --- 🛠 قاعدة البيانات ---
 def get_db_connection():
     return psycopg2.connect(DB_URL, sslmode='require')
 
@@ -27,11 +29,10 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS users 
                  (user_id BIGINT PRIMARY KEY, secret_token TEXT, lang TEXT DEFAULT 'ar',
                   signals_left INTEGER DEFAULT 10, total_paid REAL DEFAULT 0.0,
-                  expiry_days INTEGER DEFAULT 0, is_active BOOLEAN DEFAULT TRUE,
-                  state TEXT DEFAULT 'IDLE')''')
+                  expiry_days INTEGER DEFAULT 0, state TEXT DEFAULT 'IDLE')''')
     c.execute('''CREATE TABLE IF NOT EXISTS entities 
                  (id SERIAL PRIMARY KEY, user_id BIGINT, 
-                  entity_id TEXT UNIQUE, entity_name TEXT, entity_type TEXT)''')
+                  entity_id TEXT UNIQUE, entity_name TEXT)''')
     conn.commit(); c.close(); conn.close()
 
 def get_user_data(uid):
@@ -40,7 +41,7 @@ def get_user_data(uid):
     res = c.fetchone()
     if not res:
         token = secrets.token_urlsafe(16).upper()
-        c.execute("INSERT INTO users (user_id, secret_token, signals_left) VALUES (%s, %s, 10)", (uid, token))
+        c.execute("INSERT INTO users (user_id, secret_token) VALUES (%s, %s)", (uid, token))
         conn.commit()
         c.execute("SELECT * FROM users WHERE user_id = %s", (uid,))
         res = c.fetchone()
@@ -49,173 +50,149 @@ def get_user_data(uid):
     c.close(); conn.close()
     return res
 
-# --- ⌨️ لوحات التحكم المحدثة ---
-def get_main_keyboard():
-    # رابط التطبيق المصغر لعرض الشارت
-    chart_web_app = WebAppInfo(url=f"{RENDER_URL}/chart")
-    
+# --- 🌍 نظام اللغات ---
+STRINGS = {
+    'ar': {
+        'start': "👋 مرحباً بك في <b>MOH Engine</b>\nالنظام جاهز للتحليل والأتمتة.",
+        'acc': "👤 <b>حسابي</b>\n\n- معرف المستخدم: <code>{uid}</code>\n- القنوات المفعلة: {chans}\n- أيام الاشتراك: {days}\n- إشارات متبقية: {sigs}\n- إجمالي المدفوع: ${paid}",
+        'no_chan': "⚠️ لا توجد قنوات مرتبطة. يرجى إضافة البوت لقناتك كمشرف أولاً.",
+        'hook_sent': "✅ تم توليد رابط ويب هوك جديد وإرساله لك.",
+        'alpaca_req': "📈 أرسل رمز السهم للتحليل (مثال: AAPL):",
+        'lang_switch': "🇺🇸 Switch to English"
+    },
+    'en': {
+        'start': "👋 Welcome to <b>MOH Engine</b>\nSystem ready for analysis and automation.",
+        'acc': "👤 <b>Account</b>\n\n- User ID: <code>{uid}</code>\n- Active Channels: {chans}\n- Sub Days: {days}\n- Signals Left: {sigs}\n- Total Paid: ${paid}",
+        'no_chan': "⚠️ No channels linked. Add the bot as admin to your channel first.",
+        'hook_sent': "✅ New Webhook URL generated and sent to you.",
+        'alpaca_req': "📈 Send stock symbol to analyze (e.g., TSLA):",
+        'lang_switch': "🇸🇦 التحويل للعربية"
+    }
+}
+
+# --- ⌨️ لوحة التحكم ---
+def get_main_keyboard(u):
+    lang = u['lang']
     kb = [
-        [InlineKeyboardButton("👤 حسابي", callback_data='acc'),
-         InlineKeyboardButton("📊 عرض الشارات", web_app=chart_web_app)], # ميزة التطبيق المصغر
-        [InlineKeyboardButton("➕ إضافة قناة", url=f"https://t.me/{bot.get_me().username}?startchannel=true"),
-         InlineKeyboardButton("🗑 حذف قناة", callback_data='list_to_del')],
-        [InlineKeyboardButton("🔐 تجديد التوكن", callback_data='gen_token'),
-         InlineKeyboardButton("🎫 تفعيل الاشتراك", callback_data='sub_activate')],
-        [InlineKeyboardButton("🌐 الويب هوك", callback_data='get_hook')]
+        [InlineKeyboardButton("👤 " + ("حسابي" if lang=='ar' else "Account"), callback_data='acc'),
+         InlineKeyboardButton("📊 " + ("عرض الشارات" if lang=='ar' else "Live Charts"), web_app=WebAppInfo(url=f"{RENDER_URL}/chart"))],
+        [InlineKeyboardButton("➕ " + ("إضافة قناة" if lang=='ar' else "Add Channel"), url=f"https://t.me/{bot.get_me().username}?startchannel=true"),
+         InlineKeyboardButton("🗑 " + ("حذف قناة" if lang=='ar' else "Delete Channel"), callback_data='list_to_del')],
+        [InlineKeyboardButton("📈 " + ("تحليل الأسهم" if lang=='ar' else "AI Analysis"), callback_data='alpaca_analyze'),
+         InlineKeyboardButton("🎫 " + ("تفعيل الاشتراك" if lang=='ar' else "Activate Sub"), web_app=WebAppInfo(url=f"{RENDER_URL}/sub"))],
+        [InlineKeyboardButton("🔄 " + ("تجديد رابط ويب هوك" if lang=='ar' else "Renew Webhook"), callback_data='gen_token')],
+        [InlineKeyboardButton("🌐 " + ("الويب هوك" if lang=='ar' else "Webhook"), callback_data='get_hook')],
+        [InlineKeyboardButton(STRINGS[lang]['lang_switch'], callback_data='switch_lang')]
     ]
     return InlineKeyboardMarkup(kb)
 
 # --- 🤖 معالجات البوت ---
 
-def start(update: Update, context: CallbackContext):
-    u = get_user_data(update.effective_user.id)
-    update.message.reply_text(
-        f"👋 مرحباً بك في <b>MOH Engine</b>\nالنظام جاهز للعمل. يمكنك الآن عرض الشارات مباشرة عبر التطبيق المصغر بالأسفل.", 
-        reply_markup=get_main_keyboard(), 
-        parse_mode=ParseMode.HTML
-    )
-
 def handle_callbacks(update: Update, context: CallbackContext):
     query = update.callback_query
     uid = query.from_user.id
     u = get_user_data(uid)
+    lang = u['lang']
     query.answer()
 
     if query.data == 'acc':
-        txt = (f"👤 <b>حسابي</b>\n\n"
-               f"- معرف المستخدم: <code>{uid}</code>\n"
-               f"- القنوات المفعلة: {len(u['chans'])}\n"
-               f"- أيام الاشتراك: {u['expiry_days']}\n"
-               f"- إشارات متبقية: {u['signals_left']}\n"
-               f"- إجمالي المدفوع: ${u['total_paid']:.2f}")
-        query.edit_message_text(txt, reply_markup=get_main_keyboard(), parse_mode=ParseMode.HTML)
+        txt = STRINGS[lang]['acc'].format(uid=uid, chans=len(u['chans']), days=u['expiry_days'], sigs=u['signals_left'], paid=f"{u['total_paid']:.2f}")
+        query.edit_message_text(txt, reply_markup=get_main_keyboard(u), parse_mode=ParseMode.HTML)
+
+    elif query.data == 'switch_lang':
+        new_lang = 'en' if lang == 'ar' else 'ar'
+        conn = get_db_connection(); c = conn.cursor()
+        c.execute("UPDATE users SET lang=%s WHERE user_id=%s", (new_lang, uid)); conn.commit(); c.close(); conn.close()
+        u['lang'] = new_lang
+        query.edit_message_text(STRINGS[new_lang]['start'], reply_markup=get_main_keyboard(u), parse_mode=ParseMode.HTML)
+
+    elif query.data == 'get_hook':
+        if not u['chans']:
+            query.edit_message_text(STRINGS[lang]['no_chan'], reply_markup=get_main_keyboard(u))
+        else:
+            url = f"{RENDER_URL}/webhook/{u['secret_token']}"
+            bot.send_message(uid, f"🌐 <b>الويب هوك الخاص بك:</b>\n<code>{url}</code>", parse_mode=ParseMode.HTML)
 
     elif query.data == 'gen_token':
         new_token = secrets.token_urlsafe(16).upper()
         conn = get_db_connection(); c = conn.cursor()
-        c.execute("UPDATE users SET secret_token=%s WHERE user_id=%s", (new_token, uid))
-        conn.commit(); c.close(); conn.close()
-        hook_url = f"{RENDER_URL}/webhook/{new_token}"
-        bot.send_message(chat_id=uid, text=f"🔐 <b>تم تجديد التوكن بنجاح!</b>\n\nرابطك الجديد:\n<code>{hook_url}</code>", parse_mode=ParseMode.HTML)
+        c.execute("UPDATE users SET secret_token=%s WHERE user_id=%s", (new_token, uid)); conn.commit(); c.close(); conn.close()
+        url = f"{RENDER_URL}/webhook/{new_token}"
+        bot.send_message(uid, f"🔄 <b>تم تجديد الرابط بنجاح:</b>\n<code>{url}</code>", parse_mode=ParseMode.HTML)
 
-    elif query.data == 'list_to_del':
-        if not u['chans']:
-            query.edit_message_text("⚠️ لا توجد قنوات مضافة حالياً.", reply_markup=get_main_keyboard())
-        else:
-            buttons = [[InlineKeyboardButton(f"❌ {c['entity_name']}", callback_data=f"del_{c['id']}")] for c in u['chans']]
-            buttons.append([InlineKeyboardButton("🔙 عودة", callback_data='acc')])
-            query.edit_message_text("اختر القناة التي تريد حذفها:", reply_markup=InlineKeyboardMarkup(buttons))
-
-    elif query.data.startswith('del_'):
-        cid = query.data.split('_')[1]
+    elif query.data == 'alpaca_analyze':
         conn = get_db_connection(); c = conn.cursor()
-        c.execute("DELETE FROM entities WHERE id=%s AND user_id=%s", (cid, uid))
-        conn.commit(); c.close(); conn.close()
-        query.edit_message_text("✅ تم حذف القناة بنجاح.", reply_markup=get_main_keyboard())
+        c.execute("UPDATE users SET state='AWAIT_STOCK' WHERE user_id=%s", (uid,)); conn.commit(); c.close(); conn.close()
+        query.edit_message_text(STRINGS[lang]['alpaca_req'], reply_markup=get_main_keyboard(u))
 
-    elif query.data == 'get_hook':
-        hook_url = f"{RENDER_URL}/webhook/{u['secret_token']}"
-        query.edit_message_text(f"🌐 <b>رابط الويب هوك الخاص بك:</b>\n<code>{hook_url}</code>\n\n⚠️ لا تشارك هذا الرابط مع أحد.", reply_markup=get_main_keyboard(), parse_mode=ParseMode.HTML)
+def handle_text(update: Update, context: CallbackContext):
+    uid = update.effective_user.id
+    u = get_user_data(uid)
+    if u['state'] == 'AWAIT_STOCK':
+        symbol = update.message.text.upper()
+        # Alpaca API Call (Analysis Only)
+        headers = {'APCA-API-KEY-ID': ALPACA_KEY, 'APCA-API-SECRET-KEY': ALPACA_SECRET}
+        resp = requests.get(f"https://data.alpaca.markets/v2/stocks/{symbol}/quotes/latest", headers=headers)
+        if resp.status_code == 200:
+            price = resp.json()['quote']['ap']
+            update.message.reply_text(f"📊 <b>تحليل Alpaca لـ {symbol}:</b>\nالسعر الحالي: ${price}\nالحالة: متصل ✅", parse_mode=ParseMode.HTML)
+        else:
+            update.message.reply_text("❌ لم يتم العثور على السهم.")
+        conn = get_db_connection(); c = conn.cursor()
+        c.execute("UPDATE users SET state='IDLE' WHERE user_id=%s", (uid,)); conn.commit(); c.close(); conn.close()
 
 def track_new_channel(update: Update, context: CallbackContext):
-    if update.my_chat_member and update.my_chat_member.new_chat_member.status in ['administrator']:
+    if update.my_chat_member and update.my_chat_member.new_chat_member.status == 'administrator':
         chat = update.my_chat_member.chat
         user_id = update.my_chat_member.from_user.id
-        
         conn = get_db_connection(); c = conn.cursor()
-        c.execute("INSERT INTO entities (user_id, entity_id, entity_name, entity_type) VALUES (%s, %s, %s, %s) ON CONFLICT (entity_id) DO NOTHING", 
-                  (user_id, str(chat.id), chat.title, chat.type))
+        c.execute("INSERT INTO entities (user_id, entity_id, entity_name) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING", (user_id, str(chat.id), chat.title))
         conn.commit(); c.close(); conn.close()
-        
         u = get_user_data(user_id)
-        hook_url = f"{RENDER_URL}/webhook/{u['secret_token']}"
-        
-        try:
-            bot.send_message(
-                chat_id=user_id,
-                text=(f"🔗 <b>تم إضافة قناتك بنجاح!</b>\n\n"
-                      f"اسم القناة: {chat.title}\n"
-                      f"رابط الويب هوك الخاص بك:\n<code>{hook_url}</code>\n\n"
-                      f"💡 <i>استخدم تطبيق المصغر في البوت لمتابعة الشارات.</i>"),
-                parse_mode=ParseMode.HTML
-            )
-        except: pass
+        bot.send_message(user_id, f"🔗 <b>تم ربط القناة بنجاح!</b>\nالرابط الخاص بك:\n<code>{RENDER_URL}/webhook/{u['secret_token']}</code>", parse_mode=ParseMode.HTML)
 
-# --- 🕸 Flask Routes (Webhook + Chart WebApp) ---
+# --- 🕸 Flask Routes ---
 
 @app.route('/chart')
-def chart_page():
-    # واجهة HTML بسيطة مدمجة لعرض شارت TradingView الاحترافي داخل التليجرام
-    html_content = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Live Charts</title>
-        <style>
-            body { margin: 0; padding: 0; background-color: #131722; height: 100vh; overflow: hidden; }
-            .tradingview-widget-container { height: 100vh; width: 100%; }
-        </style>
-    </head>
-    <body>
-        <div class="tradingview-widget-container">
-            <div id="tradingview_chart"></div>
-            <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-            <script type="text/javascript">
-            new TradingView.widget({
-                "autosize": true,
-                "symbol": "BINANCE:BTCUSDT",
-                "interval": "D",
-                "timezone": "Etc/UTC",
-                "theme": "dark",
-                "style": "1",
-                "locale": "ar",
-                "toolbar_bg": "#f1f3f6",
-                "enable_publishing": false,
-                "allow_symbol_change": true,
-                "container_id": "tradingview_chart"
-            });
-            </script>
-        </div>
-    </body>
-    </html>
-    """
-    return render_template_string(html_content)
+def chart():
+    return render_template_string('''
+        <body style="margin:0; background:#131722;">
+            <div id="tv" style="height:100vh;"></div>
+            <script src="https://s3.tradingview.com/tv.js"></script>
+            <script>new TradingView.widget({"autosize": true, "symbol": "BINANCE:BTCUSDT", "theme": "dark", "container_id": "tv"});</script>
+        </body>''')
+
+@app.route('/sub')
+def sub_page():
+    return render_template_string('''
+        <body style="font-family:sans-serif; padding:20px; text-align:center; background:#f4f4f4;">
+            <h3>تفعيل الاشتراك / Activation</h3>
+            <input type="text" placeholder="الكود أو رقم الطلب" style="padding:10px; width:80%; margin:10px 0;"><br>
+            <button onclick="alert('تم الإرسال!')" style="padding:10px 20px; background:blue; color:white; border:none;">إرسال الطلب</button>
+        </body>''')
 
 @app.route('/webhook/<token>', methods=['POST'])
-def webhook_receiver(token):
-    data = request.json or {}
+def webhook(token):
     conn = get_db_connection(); c = conn.cursor(cursor_factory=RealDictCursor)
-    c.execute("SELECT user_id, signals_left FROM users WHERE secret_token = %s", (token,))
-    user = c.fetchone()
-    
-    if user and user['signals_left'] > 0:
-        c.execute("SELECT entity_id FROM entities WHERE user_id = %s", (user['user_id'],))
-        msg = data.get('message', '🚀 إشارة جديدة مكتشفة!')
-        
-        c.execute("UPDATE users SET signals_left = signals_left - 1 WHERE user_id = %s", (user['user_id'],))
-        conn.commit()
-        
-        for chan in c.fetchall():
-            try: bot.send_message(chat_id=chan['entity_id'], text=msg, parse_mode=ParseMode.HTML)
-            except: pass
-            
+    c.execute("SELECT user_id FROM users WHERE secret_token=%s", (token,))
+    u = c.fetchone()
+    if u:
+        c.execute("SELECT entity_id FROM entities WHERE user_id=%s", (u['user_id'],))
+        for row in c.fetchall():
+            bot.send_message(row['entity_id'], request.json.get('message', 'Signal!'), parse_mode=ParseMode.HTML)
     c.close(); conn.close()
-    return {"status": "ok"}, 200
+    return {"ok": True}
 
-# --- 🚀 التشغيل ---
+# --- 🚀 تشغيل ---
 if __name__ == '__main__':
     init_db()
     updater = Updater(BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
-    
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CallbackQueryHandler(handle_callbacks))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
     dp.add_handler(ChatMemberHandler(track_new_channel, ChatMemberHandler.MY_CHAT_MEMBER))
-
-    # تشغيل Flask وتلقي طلبات الويب هوك والتطبيق المصغر
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080))), daemon=True).start()
     
-    updater.start_polling(drop_pending_updates=True)
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=8080)).start()
+    updater.start_polling()
     updater.idle()
