@@ -5,8 +5,8 @@ from psycopg2.extras import RealDictCursor
 import secrets
 import threading
 from flask import Flask, request
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ParseMode, Bot
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, MessageHandler, Filters, ChatMemberHandler
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ParseMode, Bot, KeyboardButton, ReplyKeyboardMarkup, KeyboardButtonRequestChat
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, MessageHandler, Filters
 
 # --- الإعدادات ---
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -35,65 +35,76 @@ def get_user_full_data(uid):
     c.close(); conn.close()
     return user
 
-# --- لوحة التحكم الذكية ---
-def smart_kb(u):
+# --- لوحة التحكم بنظام Profithook ---
+def main_menu(u):
     l = u['lang']
     has_chans = len(u['chans']) > 0
     
-    kb = [
-        [InlineKeyboardButton("👤 " + ("حسابي" if l=='ar' else "Account"), callback_data='acc')],
-        [InlineKeyboardButton("➕ " + ("إضافة قناة" if l=='ar' else "Add Channel"), url=f"https://t.me/{bot.get_me().username}?startchannel=true&admin=post_messages+edit_messages+delete_messages")],
-        [InlineKeyboardButton("📈 " + ("تحليل الأسهم" if l=='ar' else "Analysis"), callback_data='analyze')]
+    # 1. أزرار الكيبورد السفلي (لطلب القناة)
+    kb_request = [[KeyboardButton(
+        text="➕ " + ("ربط قناة جديدة" if l=='ar' else "Link New Channel"),
+        request_chat=KeyboardButtonRequestChat(
+            request_id=1,
+            chat_is_channel=True,
+            user_administrator_rights={"can_post_messages": True}
+        )
+    )]]
+    
+    # 2. الأزرار الشفافة (Inline)
+    inline_kb = [
+        [InlineKeyboardButton("👤 " + ("حسابي" if l=='ar' else "Account"), callback_data='acc')]
     ]
     
-    # لا يظهر زر الويب هوك إلا إذا وجد قناة مرتبطة
     if has_chans:
-        kb.append([InlineKeyboardButton("🌐 " + ("رابط الويب هوك" if l=='ar' else "Webhook URL"), callback_data='url')])
+        inline_kb.append([InlineKeyboardButton("🌐 " + ("رابط الويب هوك" if l=='ar' else "Webhook URL"), callback_data='url')])
     
-    kb.append([InlineKeyboardButton("🇸🇦 / 🇺🇸 Language", callback_data='lang')])
-    return InlineKeyboardMarkup(kb)
+    return ReplyKeyboardMarkup(kb_request, resize_keyboard=True), InlineKeyboardMarkup(inline_kb)
 
-# --- معالجة إضافة البوت كمشرف (الربط التلقائي) ---
-def track_chats(update: Update, context: CallbackContext):
-    result = update.my_chat_member
-    if result.new_chat_member.status == 'administrator':
-        user_id = result.from_user.id
-        chat = result.chat
+# --- معالجة استلام القناة المحددة ---
+def handle_shared_chat(update: Update, context: CallbackContext):
+    if update.message.chat_shared:
+        chat_id = update.message.chat_shared.chat_id
+        uid = update.effective_user.id
         
-        conn = get_db(); c = conn.cursor()
-        c.execute("""
-            INSERT INTO entities (user_id, entity_id, entity_name) 
-            VALUES (%s, %s, %s) 
-            ON CONFLICT (entity_id) DO UPDATE SET entity_name = %s
-        """, (user_id, str(chat.id), chat.title, chat.title))
-        conn.commit(); c.close(); conn.close()
-        
-        # إشعار المستخدم بالنجاح
-        context.bot.send_message(
-            user_id, 
-            f"✅ <b>تم ربط القناة بنجاح!</b>\nاسم القناة: {chat.title}\nالآن ظهر لك خيار 'رابط الويب هوك' في القائمة الرئيسية.",
-            parse_mode='HTML'
-        )
+        # محاولة جلب معلومات القناة للتأكد من وجود البوت فيها
+        try:
+            chat_info = context.bot.get_chat(chat_id)
+            chat_title = chat_info.title
+            
+            conn = get_db(); c = conn.cursor()
+            c.execute("""
+                INSERT INTO entities (user_id, entity_id, entity_name) 
+                VALUES (%s, %s, %s) 
+                ON CONFLICT (entity_id) DO UPDATE SET user_id = %s, entity_name = %s
+            """, (uid, str(chat_id), chat_title, uid, chat_title))
+            conn.commit(); c.close(); conn.close()
+            
+            update.message.reply_text(f"✅ <b>تم الربط بنجاح!</b>\nالقناة: {chat_title}\nالمعرف: <code>{chat_id}</code>", 
+                                    parse_mode='HTML', reply_markup=main_menu(get_user_full_data(uid))[1])
+        except Exception as e:
+            update.message.reply_text("⚠️ فشل الربط. تأكد أن البوت مشرف في القناة أولاً.")
 
 # --- المعالجات المعتادة ---
 def start(update, context):
     u = get_user_full_data(update.effective_user.id)
-    update.message.reply_text("👋 <b>MrMOH Smart System</b>\nأهلاً بك في نظام الأتمتة.", reply_markup=smart_kb(u), parse_mode='HTML')
+    reply_kb, inline_kb = main_menu(u)
+    update.message.reply_text("👋 <b>MrMOH Smart System</b>\nاضغط على الزر بالأسفل لربط قناتك فوراً.", 
+                            reply_markup=reply_kb, parse_mode='HTML')
+    update.message.reply_text("قائمة التحكم:", reply_markup=inline_kb)
 
 def handle_cb(update, context):
     q = update.callback_query
     u = get_user_full_data(q.from_user.id)
     q.answer()
-
     if q.data == 'url':
-        txt = f"🌐 <b>رابط الويب هوك الخاص بك:</b>\n\n<code>{RENDER_URL}/webhook/{u['secret_token']}</code>\n\n⚠️ استخدم هذا الرابط في TradingView لإرسال الإشارات."
-        q.edit_message_text(txt, reply_markup=smart_kb(u), parse_mode='HTML')
+        q.edit_message_text(f"🌐 <b>رابط الويب هوك:</b>\n\n<code>{RENDER_URL}/webhook/{u['secret_token']}</code>", 
+                          reply_markup=main_menu(u)[1], parse_mode='HTML')
     elif q.data == 'acc':
-        chan_names = ", ".join([c['entity_name'] for c in u['chans']]) if u['chans'] else "لا يوجد"
-        txt = f"👤 <b>بيانات الحساب</b>\n\nID: <code>{u['user_id']}</code>\nالقنوات المرتبطة: {chan_names}"
-        q.edit_message_text(txt, reply_markup=smart_kb(u), parse_mode='HTML')
+        names = ", ".join([c['entity_name'] for c in u['chans']]) if u['chans'] else "لا يوجد"
+        q.edit_message_text(f"👤 <b>الحساب:</b> {u['user_id']}\n📡 <b>القنوات:</b> {names}", 
+                          reply_markup=main_menu(u)[1])
 
-# --- Flask Webhook (لاستقبال إشارات TradingView) ---
+# --- Flask Webhook ---
 @app.route('/webhook/<token>', methods=['POST'])
 def webhook_api(token):
     conn = get_db(); c = conn.cursor(cursor_factory=RealDictCursor)
@@ -108,17 +119,13 @@ def webhook_api(token):
     c.close(); conn.close()
     return {"status": "ok"}
 
-@app.route('/')
-def health(): return "System Online"
-
 if __name__ == '__main__':
     updater = Updater(BOT_TOKEN, use_context=True)
     dp = updater.dispatcher
-    
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CallbackQueryHandler(handle_cb))
-    # الهاندلر المسؤول عن التقاط إضافة البوت للقنوات
-    dp.add_handler(ChatMemberHandler(track_chats, ChatMemberHandler.MY_CHAT_MEMBER))
+    # الهاندلر الجديد لالتقاط القناة المختارة
+    dp.add_handler(MessageHandler(Filters.chat_shared, handle_shared_chat))
     
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080))), daemon=True).start()
     updater.start_polling(drop_pending_updates=True)
