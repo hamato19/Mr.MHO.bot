@@ -12,7 +12,7 @@ import threading
 # --- الإعدادات ---
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 DB_URL = "postgresql://neondb_owner:npg_blCh1ULJxyG9@ep-damp-art-a7y2e8e5-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require"
-ADMIN_ID = 8711658382  # معرفك الشخصي
+ADMIN_ID = 8711658382  # معرفك الشخصي من Neon
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -37,17 +37,45 @@ async def get_user_data(uid):
         logging.error(f"DB Error: {e}")
         return None
 
-# --- اللوحة الرئيسية ---
+# --- اللوحة الرئيسية المحدثة (مطابقة للصورة) ---
 async def get_main_menu():
     keyboard = [
-        [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🛒 تفعيل الاشتراك", callback_data='buy')],
-        [InlineKeyboardButton("📺 قنواتي", callback_data='my_channels'), InlineKeyboardButton("📢 إضافة قناة", callback_data='add_channel')],
-        [InlineKeyboardButton("💬 إضافة مجموعة", callback_data='add_group'), InlineKeyboardButton("❌ إزالة قناة", callback_data='del_entity')],
-        [InlineKeyboardButton("🔄 توليد رمز أمان", callback_data='gen_token'), InlineKeyboardButton("🌐 رابط الويب هوك", callback_data='url')],
-        [InlineKeyboardButton("📊 عرض الشارات (TradingView)", url='https://s.tradingview.com/widgetembed/?symbol=NASDAQ%3AAAPL&interval=D')],
-        [InlineKeyboardButton("▶️ طريقة الاستخدام", url='https://servernet.ct.ws')],
-        [InlineKeyboardButton("🚀 التداول الآلي 🤖", callback_data='alpaca')],
-        [InlineKeyboardButton("☎️ الدعم", url=f'tg://user?id={ADMIN_ID}')]
+        # الصف الأول
+        [
+            InlineKeyboardButton("👤 حسابي", callback_data='acc'),
+            InlineKeyboardButton("🛒 تفعيل الاشتراك", callback_data='buy')
+        ],
+        # الصف الثاني
+        [
+            InlineKeyboardButton("📢 إضافة قناة", callback_data='add_channel'),
+            InlineKeyboardButton("📺 قنواتي", callback_data='my_channels')
+        ],
+        # الصف الثالث
+        [
+            InlineKeyboardButton("💬 إضافة مجموعة", callback_data='add_group')
+        ],
+        # الصف الرابع
+        [
+            InlineKeyboardButton("❌ إزالة قناة/مجموعة", callback_data='del_entity')
+        ],
+        # الصف الخامس
+        [
+            InlineKeyboardButton("🌐 رابط الويب هوك", callback_data='url'),
+            InlineKeyboardButton("🔄 توليد رمز أمان", callback_data='gen_token')
+        ],
+        # الصف السادس
+        [
+            InlineKeyboardButton("🌍 تغيير اللغة", callback_data='change_lang'),
+            InlineKeyboardButton("▶️ طريقة الاستخدام", url='https://servernet.ct.ws')
+        ],
+        # الصف السابع
+        [
+            InlineKeyboardButton("🚀 التداول الآلي 🤖🚀", callback_data='alpaca')
+        ],
+        # الصف الثامن
+        [
+            InlineKeyboardButton("☎️ الدعم", url=f'tg://user?id={ADMIN_ID}')
+        ]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -57,8 +85,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         uid = update.effective_user.id
         order_no = update.message.text
         try:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 <b>طلب تفعيل جديد!</b>\n👤: <code>{uid}</code>\n🔢: <code>{order_no}</code>", parse_mode=ParseMode.HTML)
-            await update.message.reply_text("✅ تم استلام رقم الطلب وإرساله للإدارة. سيتم تفعيل حسابك فور التأكد.", reply_markup=await get_main_menu())
+            # إرسال تنبيه للأدمن
+            await context.bot.send_message(
+                chat_id=ADMIN_ID, 
+                text=f"🚨 <b>طلب تفعيل جديد!</b>\n👤: <code>{uid}</code>\n🔢: <code>{order_no}</code>", 
+                parse_mode=ParseMode.HTML
+            )
+            await update.message.reply_text(
+                "✅ تم استلام رقم الطلب وإرساله للإدارة. سيتم تفعيل حسابك فور التأكد.", 
+                reply_markup=await get_main_menu()
+            )
         except:
             await update.message.reply_text("✅ تم الاستلام، جاري العودة للقائمة...", reply_markup=await get_main_menu())
         context.user_data['waiting_for_order'] = False
@@ -76,7 +112,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cur.execute("SELECT COUNT(*) FROM entities WHERE user_id = %s", (uid,))
         count = cur.fetchone()[0]
         conn.close()
-        msg = f"👤 <b>معلومات حسابك</b>\n━━━━━━━━━━━━━━━\n🆔: <code>{uid}</code>\n📺: {count} قناة\n⏳: {u.get('subscription_days',0)} يوم\n📊: {u.get('remaining_signals',0)}\n💰: ${u.get('total_paid',0.00):.2f}"
+        msg = (
+            f"👤 <b>معلومات حسابك</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"🆔: <code>{uid}</code>\n"
+            f"📺: {count} كيان مربوط\n"
+            f"⏳: {u.get('subscription_days',0)} يوم\n"
+            f"📊: {u.get('remaining_signals',0)}\n"
+            f"💰: ${u.get('total_paid',0.00):.2f}"
+        )
         await query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
 
     elif query.data == 'buy':
@@ -92,26 +136,26 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn = get_db(); cur = conn.cursor()
         cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, uid))
         conn.commit(); conn.close()
-        await query.edit_message_text(f"✅ تم توليد رمز أمان جديد بنجاح!\nسيتم تحديث رابط الويب هوك الخاص بك تلقائياً.", reply_markup=await get_main_menu())
+        await query.edit_message_text(f"✅ تم توليد رمز أمان جديد بنجاح!\nسيتم تحديث رابط الويب هوك تلقائياً.", reply_markup=await get_main_menu())
 
     elif query.data == 'del_entity':
         conn = get_db(); cur = conn.cursor()
-        cur.execute("SELECT entity_id, random_tag FROM entities WHERE user_id = %s", (uid,))
+        cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (uid,))
         entities = cur.fetchall()
         conn.close()
         if not entities:
             await query.edit_message_text("❌ لا توجد قنوات مسجلة لحذفها.", reply_markup=await get_main_menu())
             return
-        kb = [[InlineKeyboardButton(f"🗑 حذف {e[0][:10]}...", callback_data=f"remove_{e[0]}")] for e in entities]
+        kb = [[InlineKeyboardButton(f"🗑 حذف {e[0]}", callback_data=f"remove_{e[0]}")] for e in entities]
         kb.append([InlineKeyboardButton("🔙 إلغاء", callback_data='back')])
-        await query.edit_message_text("❌ <b>اختر القناة المراد حذفها من قاعدة البيانات:</b>", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+        await query.edit_message_text("❌ <b>اختر القناة/المجموعة المراد حذفها:</b>", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
     elif query.data.startswith('remove_'):
         eid = query.data.replace('remove_', '')
         conn = get_db(); cur = conn.cursor()
         cur.execute("DELETE FROM entities WHERE entity_id = %s AND user_id = %s", (eid, uid))
         conn.commit(); conn.close()
-        await query.edit_message_text(f"🗑 تم حذف الكيان {eid} بنجاح.", reply_markup=await get_main_menu())
+        await query.edit_message_text(f"🗑 تم الحذف بنجاح.", reply_markup=await get_main_menu())
 
     elif query.data == 'url':
         conn = get_db(); cur = conn.cursor()
@@ -122,21 +166,31 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             url = f"https://mr-mho-bot.onrender.com/webhook/{u['secret_token']}"
             await query.edit_message_text(f"🌐 <b>رابط الويب هوك:</b>\n<code>{url}</code>", parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
         else:
-            await query.edit_message_text("⚠️ اربط قناة أولاً.", reply_markup=await get_main_menu())
+            await query.edit_message_text("⚠️ يجب ربط قناة أو مجموعة أولاً.", reply_markup=await get_main_menu())
 
     elif query.data == 'back':
         await query.edit_message_text("مرحباً بك في لوحة تحكم Mr.MOH 🤖", reply_markup=await get_main_menu())
 
-# --- نفس دوال الربط السابقة دون تغيير ---
+    elif query.data in ['add_channel', 'add_group']:
+        is_ch = (query.data == 'add_channel')
+        req_id = 1 if is_ch else 2
+        kb = [[KeyboardButton(f"🔗 اضغط هنا للربط", request_chat=KeyboardButtonRequestChat(request_id=req_id, chat_is_channel=is_ch))]]
+        await context.bot.send_message(chat_id=uid, text="يرجى اختيار الكيان المراد ربطه:", 
+                                       reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True))
+
+# --- دوال الربط (Neon Integration) ---
 async def handle_entity_shared(update: Update, context: ContextTypes.DEFAULT_TYPE):
     shared = update.message.chat_shared if update.message.chat_shared else update.message.user_shared
     uid = update.effective_user.id
     eid = str(shared.chat_id)
     rtag = secrets.token_hex(4).upper()
-    conn = get_db(); cur = conn.cursor()
-    cur.execute("INSERT INTO entities (user_id, entity_id, random_tag) VALUES (%s, %s, %s) ON CONFLICT (entity_id) DO UPDATE SET user_id = EXCLUDED.user_id", (uid, eid, rtag))
-    conn.commit(); conn.close()
-    await update.message.reply_text(f"✅ تم الربط بنجاح!", reply_markup=await get_main_menu())
+    try:
+        conn = get_db(); cur = conn.cursor()
+        cur.execute("INSERT INTO entities (user_id, entity_id, random_tag) VALUES (%s, %s, %s) ON CONFLICT (entity_id) DO UPDATE SET user_id = EXCLUDED.user_id", (uid, eid, rtag))
+        conn.commit(); conn.close()
+        await update.message.reply_text(f"✅ تم الربط بنجاح!\nID: {eid}", reply_markup=await get_main_menu())
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطأ في الربط: {e}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("مرحباً بك في لوحة تحكم Mr.MOH 🤖", reply_markup=await get_main_menu())
