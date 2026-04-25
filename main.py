@@ -44,56 +44,25 @@ def init_db():
     """)
     conn.commit(); c.close(); conn.close()
 
+# --- نهاية دالة جلب البيانات ---
 async def get_user_data(uid):
-    conn = get_db(); c = conn.cursor(cursor_factory=RealDictCursor)
-    c.execute("SELECT * FROM users WHERE user_id = %s", (uid,))
-    user = c.fetchone()
-    if not user:
-        token = secrets.token_urlsafe(12).upper()
-        c.execute("INSERT INTO users (user_id, secret_token) VALUES (%s, %s)", (uid, token))
-        conn.commit()
-        return await get_user_data(uid)
-    c.execute("SELECT * FROM entities WHERE user_id = %s", (uid,))
-    user['entities'] = c.fetchall() or []
-    c.close(); conn.close()
+    # ... كود قاعدة البيانات الموجود لديك ...
     return user
 
-# --- بناء لوحة التحكم ---async def get_main_menu(u):
-    # طلب إضافة قناة مع كامل صلاحيات الإشراف (تم تصحيحها هنا)
+# --- ضع الدالة هنا (السطر 48 وما بعده) ---
+async def get_main_menu(u):
     admin_rights = ChatAdministratorRights(
-        is_anonymous=False,
-        can_manage_chat=True,
-        can_delete_messages=True,
-        can_manage_video_chats=True,
-        can_restrict_members=True,
-        can_promote_members=True,
-        can_change_info=True,
-        can_invite_users=True,
-        can_post_messages=True,
-        can_edit_messages=True,
-        can_pin_messages=True,
-        can_post_stories=False, # اختيارية
-        can_edit_stories=False, # اختيارية
-        can_delete_stories=False # اختيارية
+        is_anonymous=False, can_manage_chat=True, can_post_messages=True,
+        can_edit_messages=True, can_delete_messages=True, can_manage_video_chats=True,
+        can_restrict_members=True, can_promote_members=True, can_change_info=True,
+        can_invite_users=True, can_pin_messages=True
     )
     
     reply_kb = ReplyKeyboardMarkup([
-        [
-            KeyboardButton("📢 إضافة قناة", request_chat=KeyboardButtonRequestChat(
-                request_id=1, 
-                chat_is_channel=True, 
-                bot_administrator_rights=admin_rights,
-                user_administrator_rights=admin_rights
-            )),
-            KeyboardButton("💬 إضافة مجموعة", request_chat=KeyboardButtonRequestChat(
-                request_id=2, 
-                chat_is_channel=False,
-                bot_administrator_rights=admin_rights
-            ))
-        ]
+        [KeyboardButton("📢 إضافة قناة", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True, bot_administrator_rights=admin_rights))],
+        [KeyboardButton("💬 إضافة مجموعة", request_chat=KeyboardButtonRequestChat(request_id=2, chat_is_channel=False, bot_administrator_rights=admin_rights))]
     ], resize_keyboard=True)
-    
-    # بقية كود الـ inline_kb كما هو...
+
     inline_kb = [
         [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🛒 تفعيل الاشتراك", callback_data='buy')],
         [InlineKeyboardButton("📺 قنواتي", callback_data='acc'), InlineKeyboardButton("📢 إضافة قناة", callback_data='info')],
@@ -106,9 +75,10 @@ async def get_user_data(uid):
     ]
     return reply_kb, InlineKeyboardMarkup(inline_kb)
 
-
-# --- المعالجات ---
+# --- المعالجات (تبدأ من السطر 110 كما في صورتك) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ... بقية الكود ...
+
     u = await get_user_data(update.effective_user.id)
     reply_kb, inline_kb = await get_main_menu(u)
     await update.message.reply_text(f"مرحباً بك في نظام الربط الذكي 🤖\nيرجى ربط قناتك أولاً لتتمكن من استقبال الإشارات.", reply_markup=reply_kb, parse_mode=ParseMode.HTML)
