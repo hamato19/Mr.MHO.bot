@@ -4,16 +4,15 @@ import secrets
 import asyncio
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, KeyboardButtonRequestChat, Bot, ChatAdministratorRights
+from flask import Flask
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, KeyboardButtonRequestChat, ChatAdministratorRights
 from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 import threading
 
 # --- الإعدادات ---
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 DB_URL = "postgresql://neondb_owner:npg_blCh1ULJxyG9@ep-damp-art-a7y2e8e5-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require"
-RENDER_URL = os.getenv('RENDER_EXTERNAL_URL', 'https://mr-mho-bot.onrender.com')
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -37,85 +36,92 @@ def init_db():
             user_id BIGINT,
             entity_id TEXT UNIQUE,
             entity_name TEXT,
+            random_tag TEXT UNIQUE,
             FOREIGN KEY (user_id) REFERENCES users(user_id)
         )
     """)
     conn.commit(); c.close(); conn.close()
 
-# --- دالة جلب البيانات ---
+# --- جلب بيانات المستخدم وتوليد توكن ---
 async def get_user_data(uid):
-    user = {"user_id": uid, "lang": "ar"} 
+    user = {"user_id": uid, "lang": "ar"}
     try:
         conn = get_db()
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM users WHERE user_id = %s", (uid,))
             result = cur.fetchone()
-            if result:
-                user = result
-            else:
-                token = secrets.token_hex(16)
+            if not result:
+                token = secrets.token_hex(8)
                 cur.execute("INSERT INTO users (user_id, secret_token) VALUES (%s, %s)", (uid, token))
                 conn.commit()
                 user = {"user_id": uid, "secret_token": token, "lang": "ar"}
+            else:
+                user = result
         conn.close()
     except Exception as e:
-        logging.error(f"Database error: {e}")
+        logging.error(f"DB Error: {e}")
     return user
 
-# --- دالة القائمة الرئيسية (تعديل صلاحيات المشرف لتكون اختيارية) ---
+# --- القائمة الرئيسية (فتح واجهة القنوات الخارجية) ---
 async def get_main_menu(u):
-    # صلاحيات بسيطة واختيارية لتجنب خطأ BadRequest
-    optional_rights = ChatAdministratorRights(
-        is_anonymous=False,
-        can_manage_chat=True,
-        can_post_messages=True,
-        can_edit_messages=True,
-        can_delete_messages=True,
-        can_invite_users=True,
-        can_restrict_members=False,
-        can_promote_members=False,
-        can_change_info=False,
-        can_pin_messages=False,
-        can_manage_video_chats=False
-    )
-    
+    # نطلب من تيليجرام فتح واجهة اختيار القنوات والمجموعات
+    # جعل bot_is_member=False يسمح للمستخدم باختيار قناة ليس البوت فيها بعد ليضيفه
     reply_kb = ReplyKeyboardMarkup([
         [
             KeyboardButton("📢 إضافة قناة", request_chat=KeyboardButtonRequestChat(
                 request_id=1, 
-                chat_is_channel=True, 
-                bot_is_member=True,
-                bot_administrator_rights=optional_rights
+                chat_is_channel=True,
+                bot_is_member=False 
             )),
             KeyboardButton("💬 إضافة مجموعة", request_chat=KeyboardButtonRequestChat(
                 request_id=2, 
-                chat_is_channel=False, 
-                bot_is_member=True,
-                bot_administrator_rights=optional_rights
+                chat_is_channel=False,
+                bot_is_member=False
             ))
         ]
     ], resize_keyboard=True)
 
     inline_kb = [
         [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🛒 تفعيل الاشتراك", callback_data='buy')],
-        [InlineKeyboardButton("📺 قنواتي", callback_data='acc'), InlineKeyboardButton("📢 إضافة قناة", callback_data='info')],
-        [InlineKeyboardButton("💬 إضافة مجموعة", callback_data='info')],
-        [InlineKeyboardButton("❌ إزالة قناة/مجموعة", callback_data='acc')],
         [InlineKeyboardButton("🔄 توليد رمز أمان", callback_data='gen_token'), InlineKeyboardButton("🌐 رابط الويب هوك", callback_data='url')],
-        [InlineKeyboardButton("▶️ طريقة الاستخدام", callback_data='help'), InlineKeyboardButton("🌍 تغيير اللغة", callback_data='lang')],
         [InlineKeyboardButton("🚀 التداول الآلي 🤖", callback_data='alpaca')],
         [InlineKeyboardButton("☎️ الدعم", callback_data='support')]
     ]
     return reply_kb, InlineKeyboardMarkup(inline_kb)
 
-# --- المعالجات ---
+# --- معالجة اختيار القناة وربطها ---
+async def handle_entity_shared(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    shared_chat = update.message.chat_shared if update.message.chat_shared else update.message.user_shared
+    if not shared_chat: return
+
+    uid = update.effective_user.id
+    entity_id = str(shared_chat.chat_id)
+    random_id = secrets.token_hex(4).upper() # توليد ID عشوائي للقناة
+    
+    try:
+        conn = get_db(); cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO entities (user_id, entity_id, random_tag) 
+            VALUES (%s, %s, %s) 
+            ON CONFLICT (entity_id) DO NOTHING
+        """, (uid, entity_id, random_id))
+        conn.commit(); cur.close(); conn.close()
+        
+        await update.message.reply_text(
+            f"✅ تم ربط القناة بنجاح!\n\n"
+            f"🆔 معرف القناة: <code>{entity_id}</code>\n"
+            f"🔑 الكود العشوائي: <code>{random_id}</code>\n\n"
+            f"تأكد الآن من رفع البوت رتبة 'مشرف' في القناة لضمان وصول الرسائل.",
+            parse_mode=ParseMode.HTML
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ حدث خطأ أثناء الربط: {e}")
+
+# --- الأوامر الأساسية ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message: return
     u = await get_user_data(update.effective_user.id)
     reply_kb, inline_kb = await get_main_menu(u)
-    
-    welcome_msg = "مرحباً بك في نظام الربط الذكي 🤖\nيرجى ربط قناتك أولاً لتتمكن من استقبال الإشارات."
-    await update.message.reply_text(welcome_msg, reply_markup=reply_kb, parse_mode=ParseMode.HTML)
+    await update.message.reply_text("مرحباً بك في نظام الربط الذكي 🤖\nاضغط على الزر أدناه لاختيار قناتك:", reply_markup=reply_kb)
     await update.message.reply_text("<b>لوحة التحكم:</b>", reply_markup=inline_kb, parse_mode=ParseMode.HTML)
 
 # --- تشغيل السيرفر ---
@@ -130,7 +136,9 @@ if __name__ == '__main__':
     threading.Thread(target=run_flask, daemon=True).start()
     
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
     
-    logging.info("Application starting...")
+    application.add_handler(CommandHandler("start", start))
+    # معالج لاستقبال بيانات القناة المختارة من واجهة تيليجرام
+    application.add_handler(MessageHandler(filters.StatusUpdate.CHAT_SHARED, handle_entity_shared))
+    
     application.run_polling()
