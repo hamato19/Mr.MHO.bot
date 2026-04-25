@@ -56,7 +56,36 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     uid = update.effective_user.id
     u = await get_user_data(uid)
+# --- إضافة كود زر حسابي هنا ---
+    if query.data == 'acc':
+        # 1. جلب بيانات المستخدم الأساسية والاشتراك
+        u = await get_user_data(uid)
+        
+        # 2. حساب عدد القنوات المربوطة من جدول entities في Neon
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM entities WHERE user_id = %s", (uid,))
+        channels_count = cur.fetchone()[0]
+        cur.close()
+        conn.close()
 
+        # 3. صياغة رسالة الحساب الاحترافية بالبيانات من قاعدة البيانات
+        account_msg = (
+            f"👤 <b>معلومات حسابك الشخصي</b>\n"
+            f"━━━━━━━━━━━━━━━\n"
+            f"🆔 <b>معرف المستخدم:</b> <code>{uid}</code>\n"
+            f"📺 <b>القنوات المفعلة:</b> {channels_count} قناة\n"
+            f"⏳ <b>أيام الاشتراك:</b> {u.get('subscription_days', 0)} يوم\n"
+            f"📊 <b>إشارات متبقية:</b> {u.get('remaining_signals', 0)}\n"
+            f"💰 <b>إجمالي المدفوع:</b> ${u.get('total_paid', 0.00):.2f}\n"
+            f"━━━━━━━━━━━━━━━"
+        )
+        
+        await query.edit_message_text(
+            text=account_msg,
+            parse_mode=ParseMode.HTML,
+            reply_markup=await get_main_menu()
+        )
     if query.data == 'url':
         # التحقق من Neon: هل توجد قنوات؟
         conn = get_db(); cur = conn.cursor()
