@@ -57,10 +57,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     u = await get_user_data(uid)
 # --- إضافة كود زر حسابي هنا ---
-    if query.data == 'acc':
-        # 1. جلب بيانات المستخدم الأساسية والاشتراك
-      u = await get_user_data(uid)  
-        # 2. حساب عدد القنوات المربوطة من جدول entities في Neon
+        if query.data == 'acc':
+        # 1. جلب بيانات المستخدم
+        u = await get_user_data(uid)
+        
+        # 2. الاتصال بقاعدة البيانات (تأكد أن السطور التالية تبدأ من نفس العمود)
         conn = get_db()
         cur = conn.cursor()
         cur.execute("SELECT COUNT(*) FROM entities WHERE user_id = %s", (uid,))
@@ -68,7 +69,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cur.close()
         conn.close()
 
-        # 3. صياغة رسالة الحساب الاحترافية بالبيانات من قاعدة البيانات
+        # 3. صياغة الرسالة
         account_msg = (
             f"👤 <b>معلومات حسابك الشخصي</b>\n"
             f"━━━━━━━━━━━━━━━\n"
@@ -85,6 +86,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode=ParseMode.HTML,
             reply_markup=await get_main_menu()
         )
+
             elif query.data == 'buy':
         # أزرار خيارات الاشتراك
         keyboard = [
