@@ -58,15 +58,23 @@ async def get_user_data(uid):
     c.close(); conn.close()
     return user
 
-# --- بناء لوحة التحكم ---
-async def get_main_menu(u):
-    # طلب إضافة قناة مع كامل صلاحيات الإشراف
+# --- بناء لوحة التحكم ---async def get_main_menu(u):
+    # طلب إضافة قناة مع كامل صلاحيات الإشراف (تم تصحيحها هنا)
     admin_rights = ChatAdministratorRights(
+        is_anonymous=False,
+        can_manage_chat=True,
+        can_delete_messages=True,
+        can_manage_video_chats=True,
+        can_restrict_members=True,
+        can_promote_members=True,
+        can_change_info=True,
+        can_invite_users=True,
         can_post_messages=True,
         can_edit_messages=True,
-        can_delete_messages=True,
-        can_manage_chat=True,
-        can_invite_users=True
+        can_pin_messages=True,
+        can_post_stories=False, # اختيارية
+        can_edit_stories=False, # اختيارية
+        can_delete_stories=False # اختيارية
     )
     
     reply_kb = ReplyKeyboardMarkup([
@@ -85,6 +93,7 @@ async def get_main_menu(u):
         ]
     ], resize_keyboard=True)
     
+    # بقية كود الـ inline_kb كما هو...
     inline_kb = [
         [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🛒 تفعيل الاشتراك", callback_data='buy')],
         [InlineKeyboardButton("📺 قنواتي", callback_data='acc'), InlineKeyboardButton("📢 إضافة قناة", callback_data='info')],
@@ -96,6 +105,7 @@ async def get_main_menu(u):
         [InlineKeyboardButton("☎️ الدعم", callback_data='support')]
     ]
     return reply_kb, InlineKeyboardMarkup(inline_kb)
+
 
 # --- المعالجات ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
