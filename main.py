@@ -12,7 +12,6 @@ import threading
 
 # --- الإعدادات ---
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-# رابط قاعدة البيانات Neon الخاص بك
 DB_URL = "postgresql://neondb_owner:npg_blCh1ULJxyG9@ep-damp-art-a7y2e8e5-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require"
 RENDER_URL = os.getenv('RENDER_EXTERNAL_URL', 'https://mr-mho-bot.onrender.com')
 
@@ -24,7 +23,6 @@ def get_db():
     return psycopg2.connect(DB_URL)
 
 def init_db():
-    """إنشاء الجداول تلقائياً عند التشغيل"""
     conn = get_db(); c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -44,11 +42,9 @@ def init_db():
     """)
     conn.commit(); c.close(); conn.close()
 
-# --- دالة جلب البيانات (المعدلة) ---
+# --- دالة جلب البيانات ---
 async def get_user_data(uid):
-    # تعريف المتغير user لضمان عدم ظهور خطأ NameError في السطر 50
     user = {"user_id": uid, "lang": "ar"} 
-    
     try:
         conn = get_db()
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -57,29 +53,47 @@ async def get_user_data(uid):
             if result:
                 user = result
             else:
-                # إذا لم يكن موجوداً، نقوم بإنشاء توكن جديد وحفظه
                 token = secrets.token_hex(16)
                 cur.execute("INSERT INTO users (user_id, secret_token) VALUES (%s, %s)", (uid, token))
                 conn.commit()
                 user = {"user_id": uid, "secret_token": token, "lang": "ar"}
         conn.close()
     except Exception as e:
-        logging.error(f"Database error in get_user_data: {e}")
-        
-    return user # السطر 50 يعمل الآن بنجاح
+        logging.error(f"Database error: {e}")
+    return user
 
-# --- دالة القائمة الرئيسية ---
+# --- دالة القائمة الرئيسية (تعديل صلاحيات المشرف لتكون اختيارية) ---
 async def get_main_menu(u):
-    admin_rights = ChatAdministratorRights(
-        is_anonymous=False, can_manage_chat=True, can_post_messages=True,
-        can_edit_messages=True, can_delete_messages=True, can_manage_video_chats=True,
-        can_restrict_members=True, can_promote_members=True, can_change_info=True,
-        can_invite_users=True, can_pin_messages=True
+    # صلاحيات بسيطة واختيارية لتجنب خطأ BadRequest
+    optional_rights = ChatAdministratorRights(
+        is_anonymous=False,
+        can_manage_chat=True,
+        can_post_messages=True,
+        can_edit_messages=True,
+        can_delete_messages=True,
+        can_invite_users=True,
+        can_restrict_members=False,
+        can_promote_members=False,
+        can_change_info=False,
+        can_pin_messages=False,
+        can_manage_video_chats=False
     )
     
     reply_kb = ReplyKeyboardMarkup([
-        [KeyboardButton("📢 إضافة قناة", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True, bot_administrator_rights=admin_rights))],
-        [KeyboardButton("💬 إضافة مجموعة", request_chat=KeyboardButtonRequestChat(request_id=2, chat_is_channel=False, bot_administrator_rights=admin_rights))]
+        [
+            KeyboardButton("📢 إضافة قناة", request_chat=KeyboardButtonRequestChat(
+                request_id=1, 
+                chat_is_channel=True, 
+                bot_is_member=True,
+                bot_administrator_rights=optional_rights
+            )),
+            KeyboardButton("💬 إضافة مجموعة", request_chat=KeyboardButtonRequestChat(
+                request_id=2, 
+                chat_is_channel=False, 
+                bot_is_member=True,
+                bot_administrator_rights=optional_rights
+            ))
+        ]
     ], resize_keyboard=True)
 
     inline_kb = [
@@ -100,24 +114,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u = await get_user_data(update.effective_user.id)
     reply_kb, inline_kb = await get_main_menu(u)
     
-    welcome_msg = f"مرحباً بك في نظام الربط الذكي 🤖\nيرجى ربط قناتك أولاً لتتمكن من استقبال الإشارات."
+    welcome_msg = "مرحباً بك في نظام الربط الذكي 🤖\nيرجى ربط قناتك أولاً لتتمكن من استقبال الإشارات."
     await update.message.reply_text(welcome_msg, reply_markup=reply_kb, parse_mode=ParseMode.HTML)
     await update.message.reply_text("<b>لوحة التحكم:</b>", reply_markup=inline_kb, parse_mode=ParseMode.HTML)
 
-# --- تشغيل Flask ---
+# --- تشغيل السيرفر ---
 @app.route('/')
 def index(): return "Bot is running!"
 
 def run_flask():
     app.run(host='0.0.0.0', port=10000)
 
-# --- تشغيل البوت ---
 if __name__ == '__main__':
     init_db()
-    # تشغيل Flask في خيط منفصل لـ Render
     threading.Thread(target=run_flask, daemon=True).start()
     
-    # بناء تطبيق تيليجرام
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     
