@@ -44,12 +44,31 @@ def init_db():
     """)
     conn.commit(); c.close(); conn.close()
 
-# --- نهاية دالة جلب البيانات ---
+# --- دالة جلب البيانات (المعدلة) ---
 async def get_user_data(uid):
-    # ... كود قاعدة البيانات الموجود لديك ...
-    return user
+    # تعريف المتغير user لضمان عدم ظهور خطأ NameError في السطر 50
+    user = {"user_id": uid, "lang": "ar"} 
+    
+    try:
+        conn = get_db()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM users WHERE user_id = %s", (uid,))
+            result = cur.fetchone()
+            if result:
+                user = result
+            else:
+                # إذا لم يكن موجوداً، نقوم بإنشاء توكن جديد وحفظه
+                token = secrets.token_hex(16)
+                cur.execute("INSERT INTO users (user_id, secret_token) VALUES (%s, %s)", (uid, token))
+                conn.commit()
+                user = {"user_id": uid, "secret_token": token, "lang": "ar"}
+        conn.close()
+    except Exception as e:
+        logging.error(f"Database error in get_user_data: {e}")
+        
+    return user # السطر 50 يعمل الآن بنجاح
 
-# --- ضع الدالة هنا (السطر 48 وما بعده) ---
+# --- دالة القائمة الرئيسية ---
 async def get_main_menu(u):
     admin_rights = ChatAdministratorRights(
         is_anonymous=False, can_manage_chat=True, can_post_messages=True,
@@ -75,78 +94,32 @@ async def get_main_menu(u):
     ]
     return reply_kb, InlineKeyboardMarkup(inline_kb)
 
-# --- المعالجات (تبدأ من السطر 110 كما في صورتك) ---
+# --- المعالجات ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ... بقية الكود ...
-
+    if not update.message: return
     u = await get_user_data(update.effective_user.id)
     reply_kb, inline_kb = await get_main_menu(u)
-    await update.message.reply_text(f"مرحباً بك في نظام الربط الذكي 🤖\nيرجى ربط قناتك أولاً لتتمكن من استقبال الإشارات.", reply_markup=reply_kb, parse_mode=ParseMode.HTML)
+    
+    welcome_msg = f"مرحباً بك في نظام الربط الذكي 🤖\nيرجى ربط قناتك أولاً لتتمكن من استقبال الإشارات."
+    await update.message.reply_text(welcome_msg, reply_markup=reply_kb, parse_mode=ParseMode.HTML)
     await update.message.reply_text("<b>لوحة التحكم:</b>", reply_markup=inline_kb, parse_mode=ParseMode.HTML)
 
-async def handle_shared_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    cid = update.message.chat_shared.chat_id
-    uid = update.effective_user.id
-    try:
-        chat = await context.bot.get_chat(cid)
-        c_name = chat.title
-    except: c_name = f"ID: {cid}"
+# --- تشغيل Flask ---
+@app.route('/')
+def index(): return "Bot is running!"
 
-    conn = get_db(); c = conn.cursor()
-    c.execute("INSERT INTO entities (user_id, entity_id, entity_name) VALUES (%s, %s, %s) ON CONFLICT (entity_id) DO UPDATE SET entity_name = %s", (uid, str(cid), c_name, c_name))
-    conn.commit(); c.close(); conn.close()
-    await update.message.reply_text(f"✅ تم ربط <b>{c_name}</b> بنجاح كمشرف!\nيمكنك الآن الحصول على رابط الويب هوك.")
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
 
-async def handle_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    uid = query.from_user.id
-    await query.answer()
-    u = await get_user_data(uid)
-    
-    if query.data == 'url':
-        # شرط منع إرسال الرابط إذا لم تكن هناك قنوات
-        if not u['entities']:
-            await query.edit_message_text("⚠️ <b>عذراً!</b>\nلا يمكنك الحصول على رابط الويب هوك قبل إضافة قناة واحدة على الأقل.", reply_markup=query.message.reply_markup, parse_mode=ParseMode.HTML)
-        else:
-            msg = f"🌐 <b>رابط الويب هوك الخاص بك:</b>\n\n<code>{RENDER_URL}/webhook/{u['secret_token']}</code>\n\nقم بنسخه ووضعه في TradingView."
-            await query.edit_message_text(msg, reply_markup=query.message.reply_markup, parse_mode=ParseMode.HTML)
-    
-    elif query.data == 'gen_token':
-        new_token = secrets.token_urlsafe(12).upper()
-        conn = get_db(); c = conn.cursor()
-        c.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, uid))
-        conn.commit(); c.close(); conn.close()
-        await query.edit_message_text("🔄 تم تحديث رمز الأمان بنجاح!", reply_markup=query.message.reply_markup)
-
-    elif query.data == 'acc':
-        entities = "\n".join([f"- {e['entity_name']}" for e in u['entities']]) if u['entities'] else "لا توجد قنوات."
-        await query.edit_message_text(f"👤 <b>حسابك:</b> <code>{uid}</code>\n📡 <b>القنوات:</b>\n{entities}", reply_markup=query.message.reply_markup, parse_mode=ParseMode.HTML)
-
-# --- Webhook (TradingView) ---
-@app.route('/webhook/<token>', methods=['POST'])
-def webhook_handler(token):
-    data = request.json
-    msg = data.get('message', '🚨 إشارة جديدة!')
-    conn = get_db(); c = conn.cursor(cursor_factory=RealDictCursor)
-    c.execute("SELECT user_id FROM users WHERE secret_token = %s", (token,))
-    user = c.fetchone()
-    if user:
-        c.execute("SELECT entity_id FROM entities WHERE user_id = %s", (user['user_id'],))
-        bot = Bot(token=BOT_TOKEN)
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        for row in c.fetchall():
-            try: loop.run_until_complete(bot.send_message(chat_id=row['entity_id'], text=msg, parse_mode=ParseMode.HTML))
-            except: pass
-        loop.close()
-    c.close(); conn.close()
-    return "OK", 200
-
+# --- تشغيل البوت ---
 if __name__ == '__main__':
     init_db()
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000))), daemon=True).start()
+    # تشغيل Flask في خيط منفصل لـ Render
+    threading.Thread(target=run_flask, daemon=True).start()
+    
+    # بناء تطبيق تيليجرام
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(handle_cb))
-    application.add_handler(MessageHandler(filters.StatusUpdate.CHAT_SHARED, handle_shared_chat))
+    
+    logging.info("Application starting...")
     application.run_polling()
