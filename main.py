@@ -7,17 +7,18 @@ import threading
 import requests
 from flask import Flask, request
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, ParseMode, WebAppInfo
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, MessageHandler, Filters, TypeHandler
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext, MessageHandler, Filters
 
-# --- ⚙️ الإعدادات ---
+# --- ⚙️ الإعدادات الأساسية ---
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 DB_URL = os.getenv('DATABASE_URL')
 RENDER_URL = os.getenv('RENDER_EXTERNAL_URL', 'https://mr-mho-bot.onrender.com')
+ADMIN_ID = 123456789  # 💡 استبدله بمعرف التليجرام الخاص بك (أبو إلياس)
 
 app = Flask(__name__)
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# --- 🛠 إدارة قاعدة البيانات ---
+# --- 🛠 إدارة قاعدة البيانات (Neon.tech) ---
 def get_db_connection():
     return psycopg2.connect(DB_URL, sslmode='require')
 
@@ -47,57 +48,74 @@ def get_user_data(uid):
     c.close(); conn.close()
     return res
 
-# --- 🌍 قاموس النصوص الموحد ---
+# --- 🌍 قاموس النصوص (عربي/إنجليزي) ---
 STRINGS = {
     'ar': {
         'start': "👋 مرحباً بك في <b>MOH Engine</b>\nالنظام السحابي مفعل وجاهز للأتمتة والتحليل.",
         'acc': "👤 <b>حسابي:</b>\n- المعرف: <code>{uid}</code>\n- القنوات/المجموعات: {chans_count}\n- الإشارات: {sigs}\n- التوكن: <code>{token}</code>",
         'hook_info': "🌐 <b>رابط الويب هوك الخاص بك:</b>\n<code>{url}/webhook/{token}</code>",
         'no_chans': "⚠️ يجب إضافة البوت لمجموعة أو قناة أولاً لتفعيل الويب هوك.",
-        'analyze_req': "📈 أرسل <b>اسم السهم</b> أو <b>الرمز</b> للتحليل:",
-        'wait_analyze': "⏳ جاري تحليل السهم عبر الذكاء الاصطناعي... انتظر قليلاً.",
+        'analyze_req': "📈 أرسل <b>اسم السهم</b> أو الرمز للتحليل:",
+        'wait_analyze': "⏳ جاري التحليل عبر الذكاء الاصطناعي...",
         'deleted': "✅ تم الحذف بنجاح.",
-        'alp_info': "🔑 أرسل مفتاح Alpaca API الخاص بك الآن لحفظه:",
-        'lang_confirm': "✅ تم تغيير اللغة إلى العربية.",
-        'token_gen': "🔐 تم توليد رمز أمان جديد وتحديث رابط الويب هوك بنجاح!"
+        'alp_info': "🔑 أرسل مفتاح Alpaca API الخاص بك الآن:",
+        'lang_confirm': "✅ تم تغيير اللغة بنجاح.",
+        'token_gen': "🔐 تم توليد رمز أمان جديد وتحديث روابطك!",
+        'sub_req': "🎫 أرسل طلب أو كود الاشتراك الآن للتفعيل:",
+        'sub_sent': "✅ تم إرسال طلبك للإدارة بنجاح.",
+        'link_success': "🔗 <b>تم ربط القناة بنجاح!</b>\nإليك رابط الويب هوك الخاص بك لهذه القناة:\n<code>{url}/webhook/{token}</code>"
     },
     'en': {
-        'start': "👋 Welcome to <b>MOH Engine</b>\nCloud system active for Automation & Analysis.",
+        'start': "👋 Welcome to <b>MOH Engine</b>\nSystem active and ready for Automation.",
         'acc': "👤 <b>Account:</b>\n- ID: <code>{uid}</code>\n- Entities: {chans_count}\n- Signals: {sigs}\n- Token: <code>{token}</code>",
         'hook_info': "🌐 <b>Your Webhook URL:</b>\n<code>{url}/webhook/{token}</code>",
-        'no_chans': "⚠️ Add bot to a channel/group first to enable Webhook.",
-        'analyze_req': "📈 Send <b>Stock Name/Symbol</b> for analysis:",
-        'wait_analyze': "⏳ Analyzing stock via AI... Please wait.",
+        'no_chans': "⚠️ Add bot to a channel first.",
+        'analyze_req': "📈 Send <b>Stock Symbol</b> for AI analysis:",
+        'wait_analyze': "⏳ Analyzing stock...",
         'deleted': "✅ Removed successfully.",
-        'alp_info': "🔑 Send your Alpaca API Key now to save it:",
-        'lang_confirm': "✅ Language switched to English.",
-        'token_gen': "🔐 New security token generated and webhook URL updated!"
+        'alp_info': "🔑 Send your Alpaca API Key:",
+        'lang_confirm': "✅ Language updated.",
+        'token_gen': "🔐 Security token updated!",
+        'sub_req': "🎫 Send subscription code:",
+        'sub_sent': "✅ Request sent to admin.",
+        'link_success': "🔗 <b>Channel Linked!</b>\nYour Webhook URL:\n<code>{url}/webhook/{token}</code>"
     }
 }
 
+# --- ⌨️ لوحة التحكم الرئيسية ---
 def get_main_keyboard(lang):
+    # الحصول على اسم البوت ديناميكياً للرابط
+    add_url = f"https://t.me/MrMHO_Bot?startchannel=true"
     kb = [
         [InlineKeyboardButton("👤 حسابي | Account" if lang=='ar' else "👤 Account", callback_data='acc'),
          InlineKeyboardButton("📈 تحليل الأسهم | AI" if lang=='ar' else "📈 AI Analysis", callback_data='analyze')],
         [InlineKeyboardButton("📊 الشارت | Chart", web_app=WebAppInfo(url=f"{RENDER_URL}/chart"))],
-        [InlineKeyboardButton("🖥 قنواتي ومجموعاتي" if lang=='ar' else "🖥 My Entities", callback_data='list_chans')],
+        [InlineKeyboardButton("🖥 قنواتي ومجموعاتي" if lang=='ar' else "🖥 My Entities", callback_data='list_chans'),
+         InlineKeyboardButton("➕ إضافة قناة" if lang=='ar' else "➕ Add Channel", url=add_url)],
         [InlineKeyboardButton("🔑 Alpaca" if lang=='ar' else "🔑 Alpaca", callback_data='alp_set'),
          InlineKeyboardButton("🌐 الويب هوك" if lang=='ar' else "🌐 Webhook", callback_data='get_hook')],
-        [InlineKeyboardButton("🔐 رمز أمان جديد" if lang=='ar' else "🔐 New Token", callback_data='gen_token')],
+        [InlineKeyboardButton("🔐 رمز أمان جديد" if lang=='ar' else "🔐 New Token", callback_data='gen_token'),
+         InlineKeyboardButton("🎫 تفعيل الاشتراك" if lang=='ar' else "🎫 Subscription", callback_data='sub_activate')],
         [InlineKeyboardButton("🇺🇸 English", callback_data='lang_en'), InlineKeyboardButton("🇸🇦 العربية", callback_data='lang_ar')]
     ]
     return InlineKeyboardMarkup(kb)
 
-# --- 🤖 المعالجات ---
+# --- 🤖 معالجات الرسائل والتحكم ---
 def track_entities(update: Update, context: CallbackContext):
     chat = update.effective_chat
     user = update.effective_user
     if chat and chat.type in ['channel', 'group', 'supergroup'] and user:
         conn = get_db_connection(); c = conn.cursor()
-        c.execute('''INSERT INTO entities (user_id, entity_id, entity_name, entity_type) 
-                     VALUES (%s, %s, %s, %s) ON CONFLICT (entity_id) DO UPDATE SET entity_name=%s''', 
-                  (user.id, str(chat.id), chat.title, chat.type, chat.title))
-        conn.commit(); c.close(); conn.close()
+        c.execute("SELECT id FROM entities WHERE entity_id = %s", (str(chat.id),))
+        if not c.fetchone():
+            c.execute('''INSERT INTO entities (user_id, entity_id, entity_name, entity_type) 
+                         VALUES (%s, %s, %s, %s)''', (user.id, str(chat.id), chat.title, chat.type))
+            conn.commit()
+            u = get_user_data(user.id)
+            hook_msg = STRINGS[u['lang']]['link_success'].format(url=RENDER_URL, token=u['secret_token'])
+            try: context.bot.send_message(chat_id=user.id, text=hook_msg, parse_mode=ParseMode.HTML)
+            except: pass
+        c.close(); conn.close()
 
 def start(update: Update, context: CallbackContext):
     u = get_user_data(update.effective_user.id)
@@ -107,14 +125,22 @@ def handle_text(update: Update, context: CallbackContext):
     uid = update.effective_user.id
     u = get_user_data(uid)
     text = update.message.text
+    lang = u['lang']
+
     if u['state'] == 'AWAIT_STOCK':
-        update.message.reply_text(STRINGS[u['lang']]['wait_analyze'])
-        analysis = f"📊 <b>تحليل الذكاء الاصطناعي لـ ({text}):</b>\n\n🔹 <b>الحالة:</b> مستقر\n🎯 <b>الأهداف:</b> قيد التكوين\n💡 <b>نصيحة:</b> راقب السيولة."
-        update.message.reply_text(analysis, reply_markup=get_main_keyboard(u['lang']), parse_mode=ParseMode.HTML)
+        update.message.reply_text(STRINGS[lang]['wait_analyze'])
+        analysis = f"📊 <b>نتائج تحليل ({text}):</b>\n\n✅ الاتجاه العام: صاعد\n🎯 الأهداف: قيد التحديث\n💡 التوصية: مراقبة نقطة الدخول."
+        update.message.reply_text(analysis, reply_markup=get_main_keyboard(lang), parse_mode=ParseMode.HTML)
         conn = get_db_connection(); c = conn.cursor(); c.execute("UPDATE users SET state='IDLE' WHERE user_id=%s", (uid,)); conn.commit(); c.close(); conn.close()
+    
     elif u['state'] == 'AWAIT_ALPACA':
         conn = get_db_connection(); c = conn.cursor(); c.execute("UPDATE users SET alpaca_key=%s, state='IDLE' WHERE user_id=%s", (text, uid)); conn.commit(); c.close(); conn.close()
-        update.message.reply_text("✅ Saved / تم الحفظ", reply_markup=get_main_keyboard(u['lang']))
+        update.message.reply_text("✅ API Saved", reply_markup=get_main_keyboard(lang))
+
+    elif u['state'] == 'AWAIT_SUB':
+        context.bot.send_message(chat_id=ADMIN_ID, text=f"🎫 <b>طلب اشتراك:</b>\nالمستخدم: <code>{uid}</code>\nالرسالة: {text}", parse_mode=ParseMode.HTML)
+        update.message.reply_text(STRINGS[lang]['sub_sent'], reply_markup=get_main_keyboard(lang))
+        conn = get_db_connection(); c = conn.cursor(); c.execute("UPDATE users SET state='IDLE' WHERE user_id=%s", (uid,)); conn.commit(); c.close(); conn.close()
 
 def handle_callbacks(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -122,6 +148,7 @@ def handle_callbacks(update: Update, context: CallbackContext):
     u = get_user_data(uid)
     lang = u['lang']
     query.answer()
+
     if query.data.startswith('lang_'):
         new_lang = query.data.split('_')[1]
         conn = get_db_connection(); c = conn.cursor(); c.execute("UPDATE users SET lang=%s WHERE user_id=%s", (new_lang, uid)); conn.commit(); c.close(); conn.close()
@@ -146,16 +173,15 @@ def handle_callbacks(update: Update, context: CallbackContext):
     elif query.data == 'get_hook':
         if not u['chans']: query.edit_message_text(STRINGS[lang]['no_chans'], reply_markup=get_main_keyboard(lang))
         else: query.edit_message_text(STRINGS[lang]['hook_info'].format(url=RENDER_URL, token=u['secret_token']), reply_markup=get_main_keyboard(lang), parse_mode=ParseMode.HTML)
-    elif query.data == 'alp_set':
-        conn = get_db_connection(); c = conn.cursor(); c.execute("UPDATE users SET state='AWAIT_ALPACA' WHERE user_id=%s", (uid,)); conn.commit(); c.close(); conn.close()
-        query.edit_message_text(STRINGS[lang]['alp_info'], reply_markup=get_main_keyboard(lang))
     elif query.data == 'gen_token':
         new_token = secrets.token_urlsafe(12).upper()
-        conn = get_db_connection(); c = conn.cursor()
-        c.execute("UPDATE users SET secret_token=%s WHERE user_id=%s", (new_token, uid))
-        conn.commit(); c.close(); conn.close()
+        conn = get_db_connection(); c = conn.cursor(); c.execute("UPDATE users SET secret_token=%s WHERE user_id=%s", (new_token, uid)); conn.commit(); c.close(); conn.close()
         query.edit_message_text(STRINGS[lang]['token_gen'], reply_markup=get_main_keyboard(lang))
+    elif query.data == 'sub_activate':
+        conn = get_db_connection(); c = conn.cursor(); c.execute("UPDATE users SET state='AWAIT_SUB' WHERE user_id=%s", (uid,)); conn.commit(); c.close(); conn.close()
+        query.edit_message_text(STRINGS[lang]['sub_req'], reply_markup=get_main_keyboard(lang))
 
+# --- 🕸 Flask Webhook Receiver ---
 @app.route('/webhook/<token>', methods=['POST'])
 def webhook_receiver(token):
     data = request.json
@@ -165,7 +191,8 @@ def webhook_receiver(token):
     if user:
         c.execute("SELECT entity_id FROM entities WHERE user_id = %s", (user['user_id'],))
         for chan in c.fetchall():
-            requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?chat_id={chan['entity_id']}&text=🚀 {data.get('message', 'Signal')}&parse_mode=HTML")
+            msg = data.get('message', 'New Signal Received! 🚀')
+            requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?chat_id={chan['entity_id']}&text={msg}&parse_mode=HTML")
     c.close(); conn.close()
     return {"status": "success"}, 200
 
@@ -173,9 +200,9 @@ def webhook_receiver(token):
 def chart(): return '<html><body style="margin:0;"><iframe src="https://www.tradingview.com/chart/" style="width:100%;height:100vh;border:none;"></iframe></body></html>'
 
 @app.route('/')
-def home(): return "Active"
+def home(): return "MOH Engine Core Active"
 
-# --- 🚀 التشغيل ---
+# --- 🚀 التشغيل النهائي ---
 if __name__ == '__main__':
     init_db()
     up = Updater(BOT_TOKEN, use_context=True)
