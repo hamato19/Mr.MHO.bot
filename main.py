@@ -1,46 +1,51 @@
-import os
-import logging
-import secrets
-import psycopg2
-import asyncio
+import os, logging, secrets, psycopg2, asyncio, threading
+from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from flask import Flask, request, jsonify
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-import threading
 
 # --- الإعدادات ---
-BOT_TOKEN = os.getenv('BOT_TOKEN')
 DB_URL = "postgresql://neondb_owner:npg_blCh1ULJxyG9@ep-damp-art-a7y2e8e5-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require"
-ADMIN_ID = 8711658382  
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+ADMIN_ID = 8711658382
+DOMAIN = "https://your-domain.com" # استبدله برابط السيرفر الفعلي
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# إنشاء تطبيق التلجرام
-application = ApplicationBuilder().token(BOT_TOKEN).build()
+# --- إعداد مجمع الاتصالات (Connection Pool) ---
+try:
+    db_pool = pool.SimpleConnectionPool(1, 20, DB_URL)
+    logging.info("✅ Database pool connected")
+except Exception as e:
+    logging.error(f"❌ DB Pool Error: {e}")
 
-def get_db():
-    return psycopg2.connect(DB_URL)
+def get_db_conn(): return db_pool.getconn()
+def release_db_conn(conn): db_pool.putconn(conn)
 
+# --- الدوال المساعدة وقاعدة البيانات ---
 async def get_user_data(uid):
+    conn = None
     try:
-        conn = get_db()
+        conn = get_db_conn()
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM users WHERE user_id = %s", (uid,))
             user = cur.fetchone()
             if not user:
                 token = secrets.token_hex(8)
-                cur.execute("INSERT INTO users (user_id, secret_token) VALUES (%s, %s)", (uid, token))
+                cur.execute("INSERT INTO users (user_id, secret_token) VALUES (%s, %s) RETURNING *", (uid, token))
                 conn.commit()
-                user = {"user_id": uid, "secret_token": token}
-        conn.close()
+                user = cur.fetchone()
         return user
-    except Exception as e:
-        logging.error(f"DB Error: {e}")
-        return None
+    finally:
+        if conn: release_db_conn(conn)
 
+def generate_webhook_url(token, entity_id):
+    return f"{DOMAIN}/webhook/{token}/{entity_id}"
+
+# --- لوحة التحكم (الأزرار الأصلية) ---
 async def get_main_menu():
     keyboard = [
         [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🛒 تفعيل الاشتراك", callback_data='buy')],
@@ -54,35 +59,20 @@ async def get_main_menu():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-WELCOME_MSG = (
-    "👋 <b>أهلاً بك!</b>\n\n"
-    "🆔 يرجى اختيار أحد الخيارات من اللوحة أدناه.\n\n"
-    "⚠️ <b>تنبيه:</b> خدمة التداول الآلي لدينا تعمل فقط في القنوات، وليس في المجموعات.\n"
-    "⚠️ عند إضافة البوت إلى قناة أو مجموعة، تأكد من منحه جميع الصلاحيات لضمان عمله بشكل صحيح."
-)
-
-@app.route('/webhook/<token>', methods=['POST'])
-def webhook(token):
+# --- مسار الـ Webhook الجديد (رابط لكل قناة) ---
+@app.route('/webhook/<token>/<int:target_id>', methods=['POST'])
+def webhook(token, target_id):
+    conn = None
     try:
         data = request.get_json()
-        if not data:
-            return jsonify({"status": "error", "message": "No data received"}), 400
-        
-        conn = get_db()
+        conn = get_db_conn()
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT user_id FROM users WHERE secret_token = %s", (token,))
-            user = cur.fetchone()
-            if not user:
-                conn.close()
-                return jsonify({"status": "error", "message": "Invalid token"}), 403
-            
-            uid = user['user_id']
-            cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (uid,))
-            entities = cur.fetchall()
-        conn.close()
-
-        if not entities:
-            return jsonify({"status": "error", "message": "No entities linked"}), 404
+            cur.execute("""
+                SELECT u.user_id FROM users u 
+                JOIN entities e ON u.user_id = e.user_id 
+                WHERE u.secret_token = %s AND e.entity_id = %s
+            """, (token, str(target_id)))
+            if not cur.fetchone(): return jsonify({"status": "unauthorized"}), 403
 
         msg = (
             f"🔔 <b>تنبيه تداول جديد!</b>\n"
@@ -94,113 +84,52 @@ def webhook(token):
 
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        for entity in entities:
-            try:
-                loop.run_until_complete(application.bot.send_message(
-                    chat_id=entity['entity_id'], 
-                    text=msg, 
-                    parse_mode=ParseMode.HTML
-                ))
-            except Exception as e:
-                logging.error(f"Failed to send to {entity['entity_id']}: {e}")
+        loop.run_until_complete(application.bot.send_message(chat_id=target_id, text=msg, parse_mode=ParseMode.HTML))
         loop.close()
-
-        return jsonify({"status": "success", "message": "Signal sent"}), 200
+        return jsonify({"status": "success"}), 200
     except Exception as e:
-        logging.error(f"Webhook Error: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
+    finally:
+        if conn: release_db_conn(conn)
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get('waiting_for_order'):
-        uid = update.effective_user.id
-        order_no = update.message.text
-        try:
-            await context.bot.send_message(
-                chat_id=ADMIN_ID, 
-                text=f"🚨 <b>طلب تفعيل جديد!</b>\n👤 الشخص: <code>{uid}</code>\n🔑 الكود: <code>{order_no}</code>", 
-                parse_mode=ParseMode.HTML
-            )
-            await update.message.reply_text("✅ تم استلام رقم الطلب.", reply_markup=await get_main_menu())
-        except:
-            await update.message.reply_text("⚠️ حدث خطأ.", reply_markup=await get_main_menu())
-        context.user_data['waiting_for_order'] = False
+# --- معالجة الأوامر والأزرار ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 أهلاً بك في بوت Mr.MHO!", reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = update.effective_user.id
     await query.answer()
-    u = await get_user_data(uid)
+    user = await get_user_data(uid)
 
-    if query.data == 'acc':
-        conn = get_db(); cur = conn.cursor()
-        cur.execute("SELECT COUNT(*) FROM entities WHERE user_id = %s", (uid,))
-        channels_count = cur.fetchone()[0]
-        cur.close(); conn.close()
-        msg = f"👤 <b>معلومات حسابك</b>\n━━━━━━━━━━━━━━━\n🆔: <code>{uid}</code>\n📺: {channels_count} كيان\n⏳: {u.get('subscription_days',0)} يوم"
-        await query.edit_message_text(msg, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
-
-    elif query.data == 'buy':
-        keyboard = [
-            [InlineKeyboardButton("🌐 للاشتراك اضغط هنا", url='https://servernet.ct.ws')],
-            [InlineKeyboardButton("🔑 إرسال كود التفعيل", callback_data='submit_order')],
-            [InlineKeyboardButton("📍 القائمة الرئيسية", callback_data='back')]
-        ]
-        await query.edit_message_text("<b>للاشتراك في البوت، يرجى زيارة موقعنا.</b>", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(keyboard))
-
-    elif query.data == 'submit_order':
-        await query.edit_message_text("📝 <b>أرسل كود التفعيل الآن:</b>", parse_mode=ParseMode.HTML)
-        context.user_data['waiting_for_order'] = True
-
-    elif query.data == 'back':
-        await query.edit_message_text(WELCOME_MSG, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
+    if query.data == 'my_channels':
+        conn = get_db_conn()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (uid,))
+                entities = cur.fetchall()
+            if not entities:
+                await query.edit_message_text("❌ لم تقم بإضافة أي قنوات بعد.")
+            else:
+                resp = "📋 <b>روابط الويب هوك لقنواتك:</b>\n\n"
+                for ent in entities:
+                    url = generate_webhook_url(user['secret_token'], ent['entity_id'])
+                    resp += f"📢 قناة <code>{ent['entity_id']}</code>:\n🔗 <code>{url}</code>\n\n"
+                await query.edit_message_text(resp, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
+        finally: release_db_conn(conn)
 
     elif query.data == 'url':
-        url = f"https://mr-mho-bot.onrender.com/webhook/{u['secret_token']}"
-        await query.edit_message_text(f"🌐 <b>رابط الويب هوك:</b>\n<code>{url}</code>", parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
+        await query.edit_message_text("🌐 اختر 'قنواتي' لنسخ رابط الويب هوك المخصص لكل قناة لديك.", reply_markup=await get_main_menu())
 
-    elif query.data == 'gen_token':
-        new_token = secrets.token_hex(8)
-        conn = get_db(); cur = conn.cursor()
-        cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, uid))
-        conn.commit(); conn.close()
-        await query.edit_message_text("✅ تم تحديث رمز الأمان.", reply_markup=await get_main_menu())
+    elif query.data == 'add_channel':
+        await query.edit_message_text("📢 أرسل الآن ID القناة (يجب أن يكون البوت أدمن فيها):")
+        context.user_data['waiting_for_channel'] = True
 
-    elif query.data == 'del_entity':
-        conn = get_db(); cur = conn.cursor()
-        cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (uid,))
-        entities = cur.fetchall()
-        conn.close()
-        if not entities:
-            await query.edit_message_text("❌ لا توجد كيانات.", reply_markup=await get_main_menu())
-            return
-        kb = [[InlineKeyboardButton(f"🗑 حذف {e[0]}", callback_data=f"remove_{e[0]}")] for e in entities]
-        kb.append([InlineKeyboardButton("🔙 إلغاء", callback_data='back')])
-        await query.edit_message_text("❌ <b>اختر المراد حذفه:</b>", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+# --- تشغيل التطبيق ---
+application = ApplicationBuilder().token(BOT_TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CallbackQueryHandler(button_callback))
 
-    elif query.data.startswith('remove_'):
-        eid = query.data.replace('remove_', '')
-        conn = get_db(); cur = conn.cursor()
-        cur.execute("DELETE FROM entities WHERE entity_id = %s AND user_id = %s", (eid, uid))
-        conn.commit(); conn.close()
-        await query.edit_message_text(f"🗑 تم الحذف.", reply_markup=await get_main_menu())
-
-async def handle_entity_shared(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    shared = update.message.chat_shared if update.message.chat_shared else update.message.user_shared
-    uid = update.effective_user.id
-    eid = str(shared.chat_id)
-    rtag = secrets.token_hex(4).upper()
-    conn = get_db(); cur = conn.cursor()
-    cur.execute("INSERT INTO entities (user_id, entity_id, random_tag) VALUES (%s, %s, %s) ON CONFLICT (entity_id) DO UPDATE SET user_id = EXCLUDED.user_id", (uid, eid, rtag))
-    conn.commit(); conn.close()
-    await update.message.reply_text(f"✅ تم الربط {eid}!", reply_markup=await get_main_menu())
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(WELCOME_MSG, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
-
-if __name__ == '__main__':
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=10000), daemon=True).start()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_callback))
-    application.add_handler(MessageHandler(filters.StatusUpdate.CHAT_SHARED, handle_entity_shared))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+if __name__ == "__main__":
+    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5000)).start()
     application.run_polling()
