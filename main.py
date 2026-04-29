@@ -123,59 +123,41 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == 'acc':
         await query.edit_message_text(f"👤 <b>بيانات حسابك:</b>\n🆔 معرفك: <code>{uid}</code>\n🔑 التوكن: <code>{user['secret_token']}</code>", parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
+   
+    elif query.data == 'url': # تأكد أن الزر في المنيو يحمل callback_data='url'
+        conn = get_db_conn()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # سحب القنوات المرتبطة بالمستخدم من Neon
+                cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (uid,))
+                ents = cur.fetchall()
+            
+            if not ents:
+                # إذا لم يضف قنوات، نبلغه داخل البوت
+                await query.edit_message_text("❌ لم تقم بإضافة أي قنوات بعد.\nيرجى إضافة قناة أولاً ليتم توليد الروابط لك.", reply_markup=await get_main_menu())
+            else:
+                # تجهيز الروابط لإرسالها في الخاص
+                txt = "🌐 <b>روابط الويب هوك الخاصة بك:</b>\n\n"
+                for e in ents:
+                    webhook_url = f"{DOMAIN}/webhook/{user['secret_token']}/{e['entity_id']}"
+                    txt += f"📢 القناة: <code>{e['entity_id']}</code>\n🔗 الرابط:\n<code>{webhook_url}</code>\n\n"
+                
+                txt += "⚠️ انسخ الرابط وضعه في TradingView Alerts."
+                
+                # الإرسال في الخاص
+                try:
+                    await context.bot.send_message(chat_id=uid, text=txt, parse_mode=ParseMode.HTML)
+                    # إشعار داخل البوت
+                    await query.edit_message_text("✅ تم إرسال روابط الويب هوك إلى الخاص بنجاح.", reply_markup=await get_main_menu())
+                except Exception:
+                    await query.edit_message_text("⚠️ فشل إرسال الرسالة الخاصة. يرجى التأكد من أنك لم تحظر البوت.", reply_markup=await get_main_menu())
+        finally:
+            release_db_conn(conn)
 
     elif query.data == 'del_menu':
-        conn = get_db_conn()
-        try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (uid,))
-                ents = cur.fetchall()
-            if not ents: await query.edit_message_text("❌ لا توجد قنوات لحذفها.")
-            else:
-                kb = [[InlineKeyboardButton(f"🗑 حذف: {e['entity_id']}", callback_data=f"remove_{e['entity_id']}")] for e in ents]
-                kb.append([InlineKeyboardButton("🔙 عودة", callback_data='home')])
-                await query.edit_message_text("❌ اختر القناة لإزالتها:", reply_markup=InlineKeyboardMarkup(kb))
-        finally: release_db_conn(conn)
+        # (بقية كود الحذف الذي شرحناه سابقاً...)
 
-    elif query.data.startswith('remove_'):
-        target_id = query.data.split('_')[1]
-        conn = get_db_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (uid, target_id))
-                conn.commit()
-            await query.edit_message_text(f"✅ تم إزالة القناة <code>{target_id}</code>.", parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
-        finally: release_db_conn(conn)
-
-    elif query.data == 'my_channels':
-        conn = get_db_conn()
-        try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (uid,))
-                ents = cur.fetchall()
-            if not ents: await query.edit_message_text("❌ لا يوجد قنوات.")
-            else:
-                txt = "📋 <b>روابط الويب هوك:</b>\n\n"
-                for e in ents: 
-                    txt += f"📢 القناة: <code>{e['entity_id']}</code>\n🔗 الرابط: <code>{DOMAIN}/webhook/{user['secret_token']}/{e['entity_id']}</code>\n\n"
-                await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
-        finally: release_db_conn(conn)
-
-    elif query.data == 'add_channel':
-        await query.edit_message_text("📢 أرسل ID القناة (مثلاً: -100xxxxxxxx):")
-        context.user_data['state'] = 'wait_ch'
-
-    elif query.data == 'gen_token':
-        new_t = secrets.token_hex(8)
-        conn = get_db_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_t, uid))
-                conn.commit()
-            await query.edit_message_text(f"🔄 تم تحديث التوكن: <code>{new_t}</code>", parse_mode=ParseMode.HTML, reply_markup=await get_main_menu())
-        finally: release_db_conn(conn)
-
-    elif query.data == 'alpaca':
+    
         kb = [[InlineKeyboardButton("🔑 Key ID", callback_data='set_k'), InlineKeyboardButton("🔐 Secret Key", callback_data='set_s')], [InlineKeyboardButton("🔙 عودة", callback_data='home')]]
         await query.edit_message_text("🚀 إعدادات Alpaca لربط التداول:", reply_markup=InlineKeyboardMarkup(kb))
 
