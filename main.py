@@ -3,12 +3,14 @@ import logging
 import secrets
 import psycopg2
 import asyncio
+import threading
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from flask import Flask, request, jsonify
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from werkzeug.serving import make_server
 
 # --- الإعدادات ---
 DB_URL = os.getenv('DB_URL', "postgresql://neondb_owner:npg_blCh1ULJxyG9@ep-damp-art-a7y2e8e5-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require")
@@ -75,7 +77,7 @@ STRINGS = {
     }
 }
 
-# إعداد قاعدة البيانات
+# --- قاعدة البيانات ---
 db_pool = pool.SimpleConnectionPool(1, 20, DB_URL)
 def get_db_conn(): return db_pool.getconn()
 def release_db_conn(conn): db_pool.putconn(conn)
@@ -108,27 +110,21 @@ async def get_main_menu(lang='العربية'):
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# إعداد تطبيق التلجرام
+# --- تطبيق التلجرام ---
 application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# --- مسار استقبال رسائل تلجرام (Webhook) ---
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
     try:
         update_data = request.get_json(force=True)
-        # الحصول على الـ loop الرئيسي الذي تم تخزينه عند التشغيل
         loop = getattr(application, 'loop', None)
-        update = Update.de_json(update_data, application.bot)
-        
         if loop and loop.is_running():
-            # استخدام run_coroutine_threadsafe للنقل الآمن بين الخيوط
+            update = Update.de_json(update_data, application.bot)
             asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
             return 'OK', 200
-        else:
-            logging.error("❌ Event loop is not running")
-            return 'Error', 500
+        return 'Loop not ready', 503
     except Exception as e:
-        logging.error(f"❌ خطأ في استقبال التحديث: {e}")
+        logging.error(f"❌ Error in webhook: {e}")
         return 'Error', 500
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
@@ -185,30 +181,41 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(T['main_menu'], parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(lang))
     elif query.data == 'acc':
         await query.edit_message_text(T['acc_info'].format(uid=uid, token=user['secret_token']), parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(lang))
+    elif query.data == 'url':
+        conn = get_db_conn()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (uid,))
+                ents = cur.fetchall()
+            if not ents:
+                await query.edit_message_text(T['no_channels'], reply_markup=await get_main_menu(lang))
+            else:
+                txt = T['webhooks_title']
+                for e in ents:
+                    txt += f"📢: <code>{e['entity_id']}</code>\n🔗: <code>{DOMAIN}/webhook/{user['secret_token']}/{e['entity_id']}</code>\n\n"
+                await context.bot.send_message(chat_id=uid, text=txt, parse_mode=ParseMode.HTML)
+                await query.edit_message_text("✅ تم إرسال الروابط لخاصك.", reply_markup=await get_main_menu(lang))
+        finally: release_db_conn(conn)
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 application.add_handler(CallbackQueryHandler(button_callback))
 
-# --- تشغيل وتهيئة ---
-async def init_app():
+# --- تشغيل موحد ---
+async def run_bot():
     await application.initialize()
-    # تخزين الـ loop في كائن الـ application للوصول إليه لاحقاً
     application.loop = asyncio.get_running_loop()
     await application.bot.set_webhook(url=f"{DOMAIN}/telegram")
     await application.start()
-    logging.info(f"✅ Webhook set to: {DOMAIN}/telegram")
-
-# تشغيل التهيئة في الـ Loop الرئيسي
-try:
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        loop.create_task(init_app())
-    else:
-        loop.run_until_complete(init_app())
-except Exception as e:
-    logging.error(f"Error during init: {e}")
+    logging.info("✅ Bot initialized and Webhook set.")
+    
+    # تشغيل Flask في Thread منفصل
+    port = int(os.environ.get('PORT', 10000))
+    server = make_server('0.0.0.0', port, app)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    asyncio.run(run_bot())
