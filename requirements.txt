@@ -1,4 +1,4 @@
 flask[async]
-python-telegram-bot --upgrade
+python-telegram-bot
 gunicorn
 psycopg2-binary
