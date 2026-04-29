@@ -222,13 +222,30 @@ application.add_handler(CommandHandler("start", start))
 application.add_handler(CallbackQueryHandler(button_callback))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-async def setup_webhook():
+# --- تشغيل البوت و Flask معاً بشكل متوافق (بديل الجزء المظلل) ---
+
+async def init_app():
+    """تهيئة تطبيق التليجرام ليعمل داخل Flask"""
+    await application.initialize()
+    # ضبط الويب هوك الخاص بالتليجرام عند بدء التشغيل باستخدام DOMAIN
     webhook_url = f"{DOMAIN}/telegram"
     await application.bot.set_webhook(url=webhook_url)
+    await application.start()
+    logging.info(f"✅ Webhook successfully set to: {webhook_url}")
+
+# تشغيل التهيئة عند بدء التطبيق لضمان عمل الـ Loop مع Flask
+try:
+    loop = asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+if loop.is_running():
+    loop.create_task(init_app())
+else:
+    loop.run_until_complete(init_app())
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(application.initialize())
-    loop.run_until_complete(setup_webhook())
-    loop.run_until_complete(application.start())
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+    # تشغيل Flask على المنفذ المطلوب
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
