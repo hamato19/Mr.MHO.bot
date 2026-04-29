@@ -11,16 +11,15 @@ from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 # --- الإعدادات ---
-# يتم جلب البيانات من متغيرات البيئة لضمان الأمان في Render
 DB_URL = os.getenv('DB_URL', "postgresql://neondb_owner:npg_blCh1ULJxyG9@ep-damp-art-a7y2e8e5-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require")
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_ID = 8711658382
-DOMAIN = os.getenv('DOMAIN', "https://your-domain.com") 
+DOMAIN = os.getenv('DOMAIN', "https://mr-mho-bot-hewc.onrender.com") 
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# --- نظام النصوص (القاموس) ---
+# --- نظام النصوص ---
 STRINGS = {
     'العربية': {
         'start_msg': "👋 أهلاً بك في بوت <b>Mr.MHO</b>",
@@ -76,13 +75,11 @@ STRINGS = {
     }
 }
 
-# إعداد مجمع الاتصالات
+# إعداد قاعدة البيانات
 db_pool = pool.SimpleConnectionPool(1, 20, DB_URL)
-
 def get_db_conn(): return db_pool.getconn()
 def release_db_conn(conn): db_pool.putconn(conn)
 
-# --- الدوال المساعدة ---
 async def get_user_data(uid):
     conn = get_db_conn()
     try:
@@ -111,38 +108,29 @@ async def get_main_menu(lang='العربية'):
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# --- البوت والتطبيق ---
+# إعداد تطبيق التلجرام
 application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# --- مسار استقبال رسائل تلجرام (Webhook) المطور ---
-@# --- مسار استقبال رسائل تلجرام (Webhook) المطور والنهائي ---
+# --- مسار استقبال رسائل تلجرام (Webhook) ---
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
     try:
-        # 1. استقبال البيانات من تلجرام
         update_data = request.get_json(force=True)
-        
-        # 2. الوصول إلى الـ Loop الأساسي للتطبيق
-        # نستخدم application.loop لضمان الوصول للـ loop الصحيح حتى من خيوط Flask
-        loop = application.loop
-        
-        # 3. تحويل البيانات إلى كائن تحديث
+        # الحصول على الـ loop الرئيسي الذي تم تخزينه عند التشغيل
+        loop = getattr(application, 'loop', None)
         update = Update.de_json(update_data, application.bot)
         
-        # 4. جدولة المهمة في الـ Loop الأساسي
         if loop and loop.is_running():
-            loop.create_task(application.process_update(update))
-        else:
-            # حل احتياطي في حال كان الـ loop لم يبدأ بعد
+            # استخدام run_coroutine_threadsafe للنقل الآمن بين الخيوط
             asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
-        
-        return 'OK', 200
+            return 'OK', 200
+        else:
+            logging.error("❌ Event loop is not running")
+            return 'Error', 500
     except Exception as e:
         logging.error(f"❌ خطأ في استقبال التحديث: {e}")
         return 'Error', 500
 
-
-# --- مسار استقبال إشارات التداول ---
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 async def trading_webhook(token, target_id):
     conn = get_db_conn()
@@ -151,10 +139,8 @@ async def trading_webhook(token, target_id):
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT u.user_id FROM users u JOIN entities e ON u.user_id = e.user_id WHERE u.secret_token = %s AND e.entity_id = %s", (token, str(target_id)))
             if not cur.fetchone(): return jsonify({"status": "unauthorized"}), 403
-
         msg = (f"🔔 <b>تنبيه تداول جديد!</b>\n📈 العملة: <code>{data.get('ticker', 'N/A')}</code>\n"
                f"⚡ النوع: <b>{data.get('action', 'N/A')}</b>\n💰 السعر: <code>{data.get('price', 'N/A')}</code>")
-
         await application.bot.send_message(chat_id=target_id, text=msg, parse_mode=ParseMode.HTML)
         return jsonify({"status": "success"}), 200
     except Exception as e:
@@ -171,7 +157,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid, text = update.effective_user.id, update.message.text
     state = context.user_data.get('state')
     if not state: return
-
     user = await get_user_data(uid)
     lang = user.get('language', 'العربية')
     T = STRINGS[lang]
@@ -182,14 +167,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s)", (uid, text))
                 conn.commit()
                 await update.message.reply_text(T['del_success'].format(target=text), parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(lang))
-            elif state == 'wait_key':
-                cur.execute("UPDATE users SET alpaca_key_id = %s WHERE user_id = %s", (text, uid)); conn.commit()
-                await update.message.reply_text("✅ Key ID Saved", reply_markup=await get_main_menu(lang))
-            elif state == 'wait_sec':
-                cur.execute("UPDATE users SET alpaca_secret_key = %s WHERE user_id = %s", (text, uid)); conn.commit()
-                await update.message.reply_text("✅ Secret Key Saved", reply_markup=await get_main_menu(lang))
             elif state == 'wait_order':
-                await context.bot.send_message(ADMIN_ID, f"🔔 Order: {text} from {uid}")
+                await context.bot.send_message(ADMIN_ID, f"🔔 Order ID: {text} from {uid}")
                 await update.message.reply_text(T['sent_to_admin'], reply_markup=await get_main_menu(lang))
     finally:
         release_db_conn(conn)
@@ -199,67 +178,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = update.effective_user.id
     await query.answer()
-    
     user = await get_user_data(uid)
     lang = user.get('language', 'العربية')
     T = STRINGS[lang]
-
     if query.data == 'home':
         await query.edit_message_text(T['main_menu'], parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(lang))
     elif query.data == 'acc':
         await query.edit_message_text(T['acc_info'].format(uid=uid, token=user['secret_token']), parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(lang))
-    elif query.data == 'url':
-        conn = get_db_conn()
-        try:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (uid,))
-                ents = cur.fetchall()
-            if not ents:
-                await query.edit_message_text(T['no_channels'], reply_markup=await get_main_menu(lang))
-            else:
-                txt = T['webhooks_title']
-                for e in ents:
-                    txt += f"📢: <code>{e['entity_id']}</code>\n🔗: <code>{DOMAIN}/webhook/{user['secret_token']}/{e['entity_id']}</code>\n\n"
-                await context.bot.send_message(chat_id=uid, text=txt, parse_mode=ParseMode.HTML)
-                await query.edit_message_text("✅ تم إرسال الروابط لخاصك.", reply_markup=await get_main_menu(lang))
-        finally: release_db_conn(conn)
-    elif query.data == 'gen_token':
-        new_t = secrets.token_hex(8)
-        conn = get_db_conn()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_t, uid)); conn.commit()
-            await query.edit_message_text(T['gen_token_msg'].format(token=new_t), parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(lang))
-        finally: release_db_conn(conn)
-    # ملاحظة: يمكن إضافة باقي حالات الـ callbacks (del_menu, change_lang, etc.) هنا
 
-# تسجيل الـ Handlers
 application.add_handler(CommandHandler("start", start))
-application.add_handler(CallbackQueryHandler(button_callback))
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+application.add_handler(CallbackQueryHandler(button_callback))
 
-# --- تهيئة التطبيق (Initialization) ---
+# --- تشغيل وتهيئة ---
 async def init_app():
     await application.initialize()
-    # ضبط الويب هوك الخاص بالتليجرام
-    webhook_url = f"{DOMAIN}/telegram"
-    await application.bot.set_webhook(url=webhook_url)
+    # تخزين الـ loop في كائن الـ application للوصول إليه لاحقاً
+    application.loop = asyncio.get_running_loop()
+    await application.bot.set_webhook(url=f"{DOMAIN}/telegram")
     await application.start()
-    logging.info(f"✅ Webhook successfully set to: {webhook_url}")
+    logging.info(f"✅ Webhook set to: {DOMAIN}/telegram")
 
-# تشغيل التهيئة عند بدء التشغيل
+# تشغيل التهيئة في الـ Loop الرئيسي
 try:
     loop = asyncio.get_event_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-if loop.is_running():
-    loop.create_task(init_app())
-else:
-    loop.run_until_complete(init_app())
+    if loop.is_running():
+        loop.create_task(init_app())
+    else:
+        loop.run_until_complete(init_app())
+except Exception as e:
+    logging.error(f"Error during init: {e}")
 
 if __name__ == "__main__":
-    # تشغيل Flask على المنفذ المطلوب لـ Render
-    port = int(os.environ.get('PORT', 8080))
+    port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
