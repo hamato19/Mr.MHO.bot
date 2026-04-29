@@ -201,6 +201,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- مسارات الويب هوك (Flask) ---
 @app.route('/telegram', methods=['POST'])
+@app.route('/telegram', methods=['POST'])
 def telegram_webhook():
     global main_loop, application
     update_data = request.get_json(force=True)
@@ -209,6 +210,40 @@ def telegram_webhook():
         asyncio.run_coroutine_threadsafe(application.process_update(update), main_loop)
         return 'OK', 200
     return 'Error', 500
+
+# 2. هذا هو المسار الجديد الذي كان ينقصك لاستقبال إشارات TradingView
+@app.route('/webhook/<token>/<target_id>', methods=['POST'])
+def trading_webhook(token, target_id):
+    conn = get_db_conn()
+    try:
+        data = request.get_json(force=True)
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # التحقق من التوكن والمعرف في قاعدة البيانات
+            cur.execute("""
+                SELECT u.user_id FROM users u 
+                JOIN entities e ON u.user_id = e.user_id 
+                WHERE u.secret_token = %s AND e.entity_id = %s
+            """, (token, str(target_id)))
+            if not cur.fetchone():
+                return jsonify({"status": "unauthorized"}), 403
+
+        # تجهيز رسالة التداول
+        msg = (f"🔔 <b>تنبيه تداول جديد!</b>\n\n"
+               f"📈 العملة: <code>{data.get('ticker', 'N/A')}</code>\n"
+               f"⚡ النوع: <b>{data.get('action', 'N/A')}</b>\n"
+               f"💰 السعر: <code>{data.get('price', 'N/A')}</code>")
+        
+        # إرسال الرسالة للقناة
+        asyncio.run_coroutine_threadsafe(
+            application.bot.send_message(chat_id=target_id, text=msg, parse_mode=ParseMode.HTML),
+            main_loop
+        )
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        logging.error(f"Webhook Error: {e}")
+        return jsonify({"status": "error"}), 500
+    finally:
+        release_db_conn(conn)
 
 async def main():
     global main_loop, application
