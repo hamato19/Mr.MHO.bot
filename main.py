@@ -115,29 +115,32 @@ async def get_main_menu(lang='العربية'):
 application = ApplicationBuilder().token(BOT_TOKEN).build()
 
 # --- مسار استقبال رسائل تلجرام (Webhook) المطور ---
+@# --- مسار استقبال رسائل تلجرام (Webhook) المطور والنهائي ---
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
     try:
         # 1. استقبال البيانات من تلجرام
         update_data = request.get_json(force=True)
         
-        # 2. الوصول إلى الـ Loop الحالي لجدولة المهمة
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = asyncio.get_event_loop()
+        # 2. الوصول إلى الـ Loop الأساسي للتطبيق
+        # نستخدم application.loop لضمان الوصول للـ loop الصحيح حتى من خيوط Flask
+        loop = application.loop
         
-        # 3. تحويل البيانات ومعالجتها كـ Task منفصلة تماماً في الخلفية
+        # 3. تحويل البيانات إلى كائن تحديث
         update = Update.de_json(update_data, application.bot)
         
-        # استخدام create_task يضمن استمرار المعالجة حتى بعد إرسال الرد لـ Render
-        loop.create_task(application.process_update(update))
+        # 4. جدولة المهمة في الـ Loop الأساسي
+        if loop and loop.is_running():
+            loop.create_task(application.process_update(update))
+        else:
+            # حل احتياطي في حال كان الـ loop لم يبدأ بعد
+            asyncio.run_coroutine_threadsafe(application.process_update(update), loop)
         
-        # الرد فوراً بـ 200 OK لإنهاء اتصال Flask وتجنب الـ Timeout
         return 'OK', 200
     except Exception as e:
         logging.error(f"❌ خطأ في استقبال التحديث: {e}")
         return 'Error', 500
+
 
 # --- مسار استقبال إشارات التداول ---
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
