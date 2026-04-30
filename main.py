@@ -147,18 +147,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         query.data = 'view_webhooks'
         await button_callback(update, context)
 
-    elif query.data.startswith('del_'):
-        target = query.data.split('_')[1]
-        with get_db() as conn:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (str(uid), target))
-                conn.commit()
-        await query.answer("🗑️ تم الحذف")
-        query.data = 'view_channels'
-        await button_callback(update, context)
-
-
-    elif query.data.startswith('del_'):
+        elif query.data.startswith('del_'):
         target = query.data.split('_')[1]
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -167,6 +156,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer(f"🗑️ تم حذف القناة {target}")
         query.data = 'view_channels'
         await button_callback(update, context)
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
