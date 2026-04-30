@@ -106,7 +106,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with conn.cursor() as cur:
                 cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
                 conn.commit()
-        await query.answer("✅ تم تحديث رمز الويب هوك بنجاح!", show_alert=True)
+        await query.answer("✅ تم تحديث الرمز بنجاح!")
         await query.edit_message_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
 
     elif data.startswith('del_'):
@@ -115,14 +115,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (str(uid), target_del))
                 conn.commit()
-        await query.answer(f"🗑️ تم حذف القناة بنجاح", show_alert=True)
+        await query.answer("🗑️ تم الحذف")
         await query.edit_message_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
 
     elif data == 'add_channel':
         await query.answer()
         context.user_data['state'] = 'wait_ch'
         kb = [[KeyboardButton("📂 اختر قناة من حسابك", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))]]
-        await context.bot.send_message(chat_id=uid, text="📢 يرجى الضغط على الزر أدناه لاختيار القناة:", 
+        await context.bot.send_message(chat_id=uid, text="📢 اختر القناة المطلوب ربطها:", 
                                     reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True))
 
     elif data == 'view_channels':
@@ -132,26 +132,26 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
                 ents = cur.fetchall()
         if not ents:
-            await query.edit_message_text("❌ لا يوجد قنوات مرتبطة.", reply_markup=await get_main_menu())
+            await query.edit_message_text("❌ لا توجد قنوات.", reply_markup=await get_main_menu())
         else:
-            txt = "📺 <b>قنواتك المرتبطة:</b>\nاضغط على الحذف لإزالة الارتباط."
             kb = [[InlineKeyboardButton(f"🗑️ حذف {e['entity_id']}", callback_data=f"del_{e['entity_id']}")] for e in ents]
             kb.append([InlineKeyboardButton(B['back'], callback_data='home')])
-            await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
+            await query.edit_message_text("📺 قنواتك المرتبطة:", reply_markup=InlineKeyboardMarkup(kb))
 
     elif data == 'view_webhooks':
         await query.answer()
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT secret_token FROM users WHERE user_id = %s", (str(uid),))
-                user_res = cur.fetchone()
-                token = user_res['secret_token'] if user_res else "None"
+                res = cur.fetchone()
+                token = res['secret_token'] if res else "None"
                 cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
                 ents = cur.fetchall()
+        
         if not ents:
-            await query.edit_message_text("❌ اربط قناة أولاً لتوليد الروابط.", reply_markup=await get_main_menu())
+            await query.edit_message_text("❌ اربط قناة أولاً.", reply_markup=await get_main_menu())
         else:
-            txt = "🌐 <b>روابط الويب هوك (TradingView):</b>\n"
+            txt = "🌐 <b>روابط الويب هوك:</b>\n"
             for e in ents:
                 txt += f"\n📍 القناة: <code>{e['entity_id']}</code>\n🔗 <code>{DOMAIN}/webhook/{token}/{e['entity_id']}</code>\n"
             await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(B['back'], callback_data='home')]]))
@@ -160,92 +160,37 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @app.route('/activation_page')
 def activation_page():
-    return render_template_string("""
-    <!DOCTYPE html>
-    <html dir="rtl">
-    <head>
-        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
-        <style>
-            body { font-family: sans-serif; background: #1c1c1c; color: white; text-align: center; padding: 20px; }
-            input { width: 90%; padding: 15px; margin: 20px 0; border-radius: 10px; border: 1px solid #444; background: #2b2b2b; color: white; font-size: 16px; }
-            button { background: #248bfe; color: white; border: none; padding: 15px; border-radius: 10px; width: 95%; font-weight: bold; }
-        </style>
-    </head>
-    <body>
-        <h3>🎟️ كود التفعيل</h3>
-        <input type="text" id="code" placeholder="أدخل الكود هنا..." autofocus>
-        <button id="sendBtn">إرسال للأدمن</button>
-        <script>
-            let tg = window.Telegram.WebApp; tg.expand();
-            document.getElementById('sendBtn').onclick = function() {
-                let val = document.getElementById('code').value;
-                if(val.trim() !== "") { tg.sendData(val); }
-            };
-        </script>
-    </body>
-    </html>
-    """)
+    return render_template_string("<h3>🎟️ كود التفعيل</h3><input type='text' id='c'><button id='b'>إرسال</button><script>let tg=window.Telegram.WebApp;tg.expand();document.getElementById('b').onclick=()=>{tg.sendData(document.getElementById('c').value)}</script>")
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def trading_webhook(token, target_id):
     try:
-        # 1. استقبال البيانات بصيغة JSON
         data = request.get_json(force=True)
-        if not data:
-            return jsonify({"status": "error", "message": "No data provided"}), 400
-
-        # 2. التحقق من صلاحية التوكن وربطه بالقناة المطلوبة في قاعدة البيانات
         with get_db() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT 1 FROM users u 
-                    JOIN entities e ON u.user_id = e.user_id 
-                    WHERE u.secret_token = %s AND e.entity_id = %s
-                """, (token, str(target_id)))
-                
-                if not cur.fetchone():
-                    logging.warning(f"Unauthorized webhook attempt: Token {token} for ID {target_id}")
-                    return jsonify({"status": "unauthorized"}), 403
+                cur.execute("SELECT 1 FROM users u JOIN entities e ON u.user_id = e.user_id WHERE u.secret_token = %s AND e.entity_id = %s", (token, str(target_id)))
+                if not cur.fetchone(): return jsonify({"status": "unauthorized"}), 403
 
-        # 3. معالجة نوع الإشارة (شراء أو بيع) لتحديد الأيقونة والنص
-        # يدعم: buy, buy+, long | sell, sell-, short
         sig = str(data.get('signal', '')).lower()
-        if any(x in sig for x in ['buy', 'long']):
-            icon = "🟢"
-            action_text = "شـراء (BUY)"
-        elif any(x in sig for x in ['sell', 'short']):
-            icon = "🔴"
-            action_text = "بيـع (SELL)"
-        else:
-            icon = "⚪"
-            action_text = "تنبيه (ALERT)"
+        icon = "🟢" if any(x in sig for x in ['buy', 'long']) else "🔴"
+        action = "شـراء (BUY)" if "buy" in sig else "بيـع (SELL)"
 
-        # 4. تنسيق الرسالة النهائية لتظهر في تلجرام
         msg = (
             f"{icon} <b>تنبيه تداول جديد!</b>\n\n"
             f"📊 الأداة: <code>{data.get('ticker', 'N/A')}</code>\n"
-            f"⚡ العملية: <b>{action_text}</b>\n"
+            f"⚡ العملية: <b>{action}</b>\n"
             f"💰 السعر: <code>{data.get('price', 'N/A')}</code>\n"
             f"🎯 هدف (TP): <b>{data.get('tp', 'N/A')}</b>\n"
             f"🛑 وقف (SL): <b>{data.get('sl', 'N/A')}</b>\n"
             f"🔥 القوة: <code>{data.get('trade_power', 'N/A')}</code>\n"
-            f"⏳ إغلاق آلي: <code>{data.get('auto_close', 'N/A')}</code>\n"
-            f"📝 ملاحظة: <i>{data.get('msg', 'لا يوجد')}</i>"
+            f"⏳ إغلاق آلي: <code>{data.get('auto_close', 'N/A')}</code>"
         )
 
-        # 5. إرسال الرسالة إلى تلجرام عبر الحلقة البرمجية الرئيسية (Async)
         if main_loop and application:
-            asyncio.run_coroutine_threadsafe(
-                application.bot.send_message(
-                    chat_id=target_id, 
-                    text=msg, 
-                    parse_mode=ParseMode.HTML
-                ), 
-                main_loop
-            )
-            return jsonify({"status": "success", "sent_to": target_id}), 200
+            asyncio.run_coroutine_threadsafe(application.bot.send_message(chat_id=target_id, text=msg, parse_mode=ParseMode.HTML), main_loop)
+            return jsonify({"status": "success"}), 200
         else:
+            return jsonify({"status": "error", "message": "Bot not ready"}), 500
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -259,13 +204,11 @@ def telegram_webhook():
 
 # --- معالجة الرسائل ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.effective_user: return
     uid = update.effective_user.id
-
     if update.message and update.message.web_app_data:
         code = update.message.web_app_data.data
-        await update.message.reply_text(f"✅ تم إرسال الكود: <code>{code}</code>", parse_mode=ParseMode.HTML)
-        await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 <b>طلب تفعيل!</b>\nالمستخدم: {uid}\nالكود: <code>{code}</code>", parse_mode=ParseMode.HTML)
+        await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 طلب تفعيل!\nمن: {uid}\nالكود: {code}")
+        await update.message.reply_text("✅ تم إرسال الكود للأدمن.")
         return
 
     if context.user_data.get('state') == 'wait_ch' and update.message.chat_shared:
@@ -275,23 +218,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s)", (str(uid), target_id))
                     conn.commit()
-                    await update.message.reply_text(f"✅ تم ربط القناة: <code>{target_id}</code>", parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
-                except: await update.message.reply_text("❌ هذه القناة مرتبطة بالفعل.")
+                    await update.message.reply_text(f"✅ تم ربط: {target_id}", reply_markup=ReplyKeyboardRemove())
+                except: await update.message.reply_text("❌ مرتبطة مسبقاً.")
         context.user_data['state'] = None
 
 async def main():
     global main_loop, application
     main_loop = asyncio.get_running_loop()
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
-    
     await application.initialize()
     await application.start()
     await application.bot.set_webhook(url=f"{DOMAIN}/telegram")
-    
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=10000), daemon=True).start()
     while True: await asyncio.sleep(3600)
 
