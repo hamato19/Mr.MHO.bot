@@ -82,9 +82,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     B = STRINGS['العربية']['btns']
     await query.answer()
 
+    # --- الحالة 1: القائمة الرئيسية ---
     if query.data == 'home':
         await query.edit_message_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
     
+    # --- الحالة 2: حسابي ---
     elif query.data == 'acc':
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -93,18 +95,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         txt = STRINGS['العربية']['acc_info'].format(uid=uid, ch_count=count)
         await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(B['back'], callback_data='home')]]))
 
+    # --- الحالة 3: قائمة الشراء ---
     elif query.data == 'buy_menu':
         kb = [[InlineKeyboardButton(B['sub_link'], url="https://servernet.ct.ws")],
               [InlineKeyboardButton(B['send_code'], web_app=WebAppInfo(url=f"{DOMAIN}/activation_page"))],
               [InlineKeyboardButton(B['back'], callback_data='home')]]
         await query.edit_message_text(STRINGS['العربية']['buy_menu'], reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
+    # --- الحالة 4: إضافة قناة ---
     elif query.data == 'add_channel':
         context.user_data['state'] = 'wait_ch'
         kb = [[KeyboardButton("📂 اختر قناة من حسابك", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))]]
         await context.bot.send_message(chat_id=uid, text="📢 يرجى الضغط على الزر ومشاركة القناة المطلوب ربطها:", 
                                     reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True))
 
+    # --- الحالة 5: عرض القنوات ---
     elif query.data == 'view_channels':
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -114,14 +119,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(STRINGS['العربية']['no_ch'], reply_markup=await get_main_menu())
         else:
             txt = "📺 <b>قنواتك المرتبطة:</b>\n"
-            kb = []
-            for e in ents:
-                eid = e['entity_id']
-                txt += f"\n✅ القناة: <code>{eid}</code>"
-                kb.append([InlineKeyboardButton(f"🗑️ حذف {eid}", callback_data=f"del_{eid}")])
+            kb = [[InlineKeyboardButton(f"🗑️ حذف {e['entity_id']}", callback_data=f"del_{e['entity_id']}")] for e in ents]
             kb.append([InlineKeyboardButton(B['back'], callback_data='home')])
             await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
 
+    # --- الحالة 6: عرض الويب هوك ---
     elif query.data == 'view_webhooks':
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -132,30 +134,33 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not ents:
             await query.edit_message_text(STRINGS['العربية']['no_ch'], reply_markup=await get_main_menu())
         else:
-            txt = "🌐 <b>روابط الويب هوك الخاصة بك:</b>\n"
+            txt = "🌐 <b>روابط الويب هوك:</b>\n"
             for e in ents:
                 wh = f"{DOMAIN}/webhook/{token}/{e['entity_id']}"
                 txt += f"\n📍 القناة: <code>{e['entity_id']}</code>\n🔗 <code>{wh}</code>\n"
             await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(B['back'], callback_data='home')]]))
 
-        elif query.data == 'gen_token':
+    # --- الحالة 7: توليد رمز جديد ---
+    elif query.data == 'gen_token':
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (secrets.token_hex(8), str(uid)))
                 conn.commit()
-        await query.answer("✅ تم تحديث الرمز والروابط!", show_alert=True)
+        await query.answer("✅ تم تحديث الرمز!", show_alert=True)
         query.data = 'view_webhooks'
         await button_callback(update, context)
 
-        elif query.data.startswith('del_'):
+    # --- الحالة 8: حذف قناة ---
+    elif query.data.startswith('del_'):
         target = query.data.split('_')[1]
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (str(uid), target))
                 conn.commit()
-        await query.answer(f"🗑️ تم حذف القناة {target}")
+        await query.answer(f"🗑️ تم حذف {target}")
         query.data = 'view_channels'
         await button_callback(update, context)
+
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
