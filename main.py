@@ -227,24 +227,46 @@ def telegram_webhook():
     return 'OK', 200
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
+@app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def trading_webhook(token, target_id):
     conn = get_db_conn()
     try:
         data = request.get_json(force=True)
+        # التحقق من التوكن والقناة في قاعدة البيانات
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT 1 FROM users u JOIN entities e ON u.user_id = e.user_id WHERE u.secret_token = %s AND e.entity_id = %s", (token, str(target_id)))
-            if not cur.fetchone(): return jsonify({"status": "unauthorized"}), 403
+            if not cur.fetchone(): 
+                return jsonify({"status": "unauthorized"}), 403
 
-                # جلب المعرف من قاعدة البيانات (target_id هنا هو 1003806611748)
+        # منطق تحديد المعرف الصحيح للإرسال (الذي ظهر في لقطة الشاشة 1777535396158.jpeg)
         target_str = str(target_id)
         
-        # التعديل الذكي: بما أن الرقم يبدأ بـ 100، سنضيف فقط علامة السالب
         if target_str.startswith('100'):
+            # إذا كان الرقم يبدأ بـ 100، نضيف علامة السالب فقط
             real_chat_id = f"-{target_str}" 
         elif not target_str.startswith('-'):
+            # إذا كان رقماً عادياً، نضيف البادئة الكاملة -100
             real_chat_id = f"-100{target_str}"
         else:
+            # إذا كان يحتوي على السالب أصلاً، نستخدمه كما هو
             real_chat_id = target_str
+
+        # تجهيز نص الرسالة وتنسيقها
+        msg = (f"🔔 <b>تنبيه تداول جديد!</b>\n\n"
+               f"📈 العملة: <code>{data.get('ticker', 'N/A')}</code>\n"
+               f"⚡ النوع: <b>{data.get('action', 'N/A')}</b>\n"
+               f"💰 السعر: <code>{data.get('price', 'N/A')}</code>")
+        
+        # إرسال الرسالة عبر البوت باستخدام asyncio
+        asyncio.run_coroutine_threadsafe(application.bot.send_message(chat_id=real_chat_id, text=msg, parse_mode=ParseMode.HTML), main_loop)
+        
+        return jsonify({"status": "success"}), 200
+    except Exception as e:
+        logging.error(f"Webhook Error: {e}")
+        return jsonify({"status": "error"}), 500
+    finally:
+        release_db_conn(conn)
+
 
         # الآن سيصبح real_chat_id هو -1003806611748 وهو المعرف الصحيح
 
