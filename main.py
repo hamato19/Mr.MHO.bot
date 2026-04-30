@@ -272,6 +272,121 @@ def trading_webhook(token, target_id):
     except: return jsonify({"status": "error"}), 500
     finally: release_db_conn(conn)
 
+@# --- مسارات الـ Web App (iFrame) لإرسال الكود بخصوصية ---
+
+@app.route('/activation_page')
+def activation_page():
+    # هذه الصفحة تفتح كـ iFrame داخل تلجرام
+    return '''
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+                   padding: 20px; background-color: #f4f7f9; text-align: center; color: #222; }
+            .container { background: white; padding: 25px; border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+            h3 { color: #0088cc; margin-bottom: 10px; }
+            p { font-size: 14px; color: #555; line-height: 1.5; }
+            input { width: 100%; padding: 14px; margin: 20px 0; border: 2px solid #e0e0e0; border-radius: 12px; 
+                   font-size: 16px; box-sizing: border-box; outline: none; transition: 0.3s; text-align: center; }
+            input:focus { border-color: #0088cc; box-shadow: 0 0 8px rgba(0,136,204,0.2); }
+            button { background: #0088cc; color: white; border: none; padding: 15px; border-radius: 12px; 
+                    cursor: pointer; font-size: 16px; width: 100%; font-weight: bold; transition: 0.3s; }
+            button:active { transform: scale(0.98); background: #0077b5; }
+            .footer { font-size: 11px; color: #aaa; margin-top: 20px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h3>🔒 تفعيل الاشتراك</h3>
+            <p>يرجى إدخال كود التفعيل بالأسفل. سيتم إرساله مباشرة للإدارة بشكل آمن.</p>
+            <input type="text" id="v_code" placeholder="أدخل الكود هنا" autocomplete="off">
+            <button onclick="sendCode()">إرسال الطلب</button>
+            <div class="footer">🔒 هذه النافذة مشفرة - لن يظهر الكود في سجل الدردشة.</div>
+        </div>
+
+        <script>
+            const tg = window.Telegram.WebApp;
+            tg.expand();
+            tg.ready();
+
+            function sendCode() {
+                const codeVal = document.getElementById('v_code').value;
+                if (!codeVal || codeVal.length < 3) {
+                    tg.showAlert("يرجى إدخال كود صحيح");
+                    return;
+                }
+
+                fetch('/submit_code', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        user_id: tg.initDataUnsafe.user.id,
+                        code: codeVal
+                    })
+                }).then(res => {
+                    if(res.ok) {
+                        tg.close();
+                    } else {
+                        tg.showAlert("حدث خطأ في الإرسال، حاول لاحقاً");
+                    }
+                }).catch(err => tg.showAlert("فشل الاتصال بالسيرفر"));
+            }
+        </script>
+    </body>
+    </html>
+    '''
+
+@app.route('/submit_code', methods=['POST'])
+def submit_code():
+    try:
+        data = request.get_json(force=True)
+        uid = data.get('user_id')
+        code = data.get('code')
+        
+        # إرسال الكود للأدمن (أنت)
+        asyncio.run_coroutine_threadsafe(
+            application.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"🎟️ <b>طلب تفعيل جديد (عبر iFrame)</b>\n\n👤 المستخدم: <code>{uid}</code>\n🔑 الكود: <code>{code}</code>",
+                parse_mode=ParseMode.HTML
+            ), main_loop
+        )
+        
+        # إرسال تأكيد للمستخدم في البوت
+        asyncio.run_coroutine_threadsafe(
+            application.bot.send_message(
+                chat_id=uid,
+                text="✅ <b>تم استلام طلبك!</b>\nجاري مراجعة الكود من قبل الإدارة لتفعيل اشتراكك.",
+                parse_mode=ParseMode.HTML
+            ), main_loop
+        )
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        logging.error(f"Error in submit_code: {e}")
+        return jsonify({"status": "error"}), 500
+
+# --- مسارات البوت الأساسية ---
+
+@app.route('/webhook/<token>/<target_id>', methods=['POST'])
+def trading_webhook(token, target_id):
+    conn = get_db_conn()
+    try:
+        data = request.get_json(force=True)
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT 1 FROM users u JOIN entities e ON u.user_id = e.user_id WHERE u.secret_token = %s AND e.entity_id = %s", (token, str(target_id)))
+            if not cur.fetchone(): return jsonify({"status": "unauthorized"}), 403
+        
+        msg = (f"🔔 <b>تنبيه تداول!</b>\n\n📈 العملة: <code>{data.get('ticker', 'N/A')}</code>\n"
+               f"⚡ النوع: <b>{data.get('action', 'N/A')}</b>\n💰 السعر: <code>{data.get('price', 'N/A')}</code>")
+        asyncio.run_coroutine_threadsafe(application.bot.send_message(chat_id=target_id, text=msg, parse_mode=ParseMode.HTML), main_loop)
+        return jsonify({"status": "success"}), 200
+    except: return jsonify({"status": "error"}), 500
+    finally: release_db_conn(conn)
+
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
     update_data = request.get_json(force=True)
@@ -284,14 +399,22 @@ async def main():
     global main_loop, application
     main_loop = asyncio.get_running_loop()
     application = ApplicationBuilder().token(BOT_TOKEN).build()
+    
+    # الـ Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_callback))
+    # تم تحديث الفلتر ليشمل مشاركة القنوات والنصوص المحولة
     application.add_handler(MessageHandler((filters.TEXT | filters.FORWARDED | filters.StatusUpdate.CHAT_SHARED) & ~filters.COMMAND, handle_message))
+    
     await application.initialize()
     await application.start()
     await application.bot.set_webhook(url=f"{DOMAIN}/telegram")
+    
+    # تشغيل Flask في Thread منفصل
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=10000), daemon=True).start()
+    
     while True: await asyncio.sleep(3600)
 
 if __name__ == "__main__":
     asyncio.run(main())
+))
