@@ -3,6 +3,7 @@ import logging
 import secrets
 import asyncio
 import threading
+import re
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from flask import Flask, request, jsonify
@@ -31,7 +32,7 @@ STRINGS = {
     'العربية': {
         'intro': "🤖 <b>مرحباً بك في Profit Hook!</b>\nنظام ربط TradingView بتلجرام.",
         'welcome': "🏠 <b>القائمة الرئيسية:</b>",
-        'buy_menu': "🛒 <b>تفعيل الاشتراك:</b>\nيمكنك الاشتراك عبر الرابط أو إرسال الكود للدعم عبر النافذة الآمنة.",
+        'buy_menu': "🛒 <b>تفعيل الاشتراك:</b>\nيمكنك الاشتراك عبر الرابط أو إرسال الكود عبر النافذة الآمنة.",
         'acc_info': "👤 <b>بيانات حسابك:</b>\n\n- معرف المستخدم: <code>{uid}</code>\n- القنوات المفعلة: <code>{ch_count}</code>",
         'add_ch_msg': "📢 <b>إضافة قناة جديدة:</b>\nاضغط على الزر بالأسفل لاختيار قناة من حسابك.",
         'no_ch': "❌ لا يوجد قنوات مرتبطة حالياً.",
@@ -74,7 +75,6 @@ async def get_main_menu():
 
 # --- الـ Handlers ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.effective_user: return
     await get_user_data(update.effective_user.id)
     await update.message.reply_text(STRINGS['العربية']['intro'], parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
     await update.message.reply_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
@@ -105,6 +105,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
               [InlineKeyboardButton(B['back'], callback_data='home')]]
         await query.edit_message_text(STRINGS['العربية']['buy_menu'], reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
+    elif query.data == 'add_channel':
+        context.user_data['state'] = 'wait_ch'
+        keyboard = [[KeyboardButton(B['share_btn'], request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))]]
+        await context.bot.send_message(chat_id=uid, text=STRINGS['العربية']['add_ch_msg'], 
+                                    reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True))
+
     elif query.data == 'url':
         conn = get_db_conn()
         try:
@@ -114,12 +120,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not ents:
                 await query.edit_message_text(STRINGS['العربية']['no_ch'], reply_markup=await get_main_menu())
             else:
-                txt = "🌐 <b>روابط الويب هوك المحدثة:</b>\n"
+                txt = "🌐 <b>روابط الويب هوك:</b>\n"
                 kb = []
                 for e in ents:
                     eid = e['entity_id']
-                    webhook = f"{DOMAIN}/webhook/{user['secret_token']}/{eid}"
-                    txt += f"\n📍 القناة: <code>{eid}</code>\n🔗 الرابط: <code>{webhook}</code>\n"
+                    wh = f"{DOMAIN}/webhook/{user['secret_token']}/{eid}"
+                    txt += f"\n📍 <code>{eid}</code>\n🔗 <code>{wh}</code>\n"
                     kb.append([InlineKeyboardButton(f"🗑️ حذف {eid}", callback_data=f"del_{eid}")])
                 kb.append([InlineKeyboardButton(B['back'], callback_data='home')])
                 await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
@@ -132,8 +138,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with conn.cursor() as cur:
                 cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
                 conn.commit()
-            await query.answer("🔄 تم توليد رمز جديد وتحديث الروابط")
-            # تحديث العرض فوراً لعكس الروابط الجديدة
+            await query.answer("🔄 تم تحديث رمز الأمان")
             query.data = 'url'
             await button_callback(update, context)
         finally: release_db_conn(conn)
@@ -145,33 +150,29 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with conn.cursor() as cur:
                 cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (str(uid), target))
                 conn.commit()
-            await query.answer("✅ تم الحذف")
             query.data = 'url'
             await button_callback(update, context)
         finally: release_db_conn(conn)
 
-# --- دالة handle_message ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.effective_user or not update.message: return
     uid = update.effective_user.id
-    
     if context.user_data.get('state') == 'wait_ch' and update.message.chat_shared:
         target_id = str(update.message.chat_shared.chat_id)
         if not target_id.startswith('-100'): target_id = f"-100{target_id}"
-        
         conn = get_db_conn()
         try:
             with conn.cursor() as cur:
                 cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s)", (str(uid), target_id))
                 conn.commit()
             await update.message.reply_text(f"✅ تم ربط القناة: <code>{target_id}</code>", parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
-            await update.message.reply_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
+            await update.message.reply_text("🏠 القائمة الرئيسية:", reply_markup=await get_main_menu())
             context.user_data['state'] = None
         except:
-            await update.message.reply_text("❌ القناة مضافة مسبقاً.")
+            await update.message.reply_text("❌ مضافة مسبقاً.")
         finally: release_db_conn(conn)
 
-# --- Flask & Web App ---
+# --- مسارات Flask ---
+
 @app.route('/activation_page')
 def activation_page():
     return '''
@@ -182,29 +183,28 @@ def activation_page():
         <script src="https://telegram.org/js/telegram-web-app.js"></script>
         <style>
             body { font-family: sans-serif; padding: 20px; text-align: center; background: #f4f7f9; }
-            .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-            input { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; text-align:center; }
-            button { background: #0088cc; color: white; border: none; padding: 12px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; }
+            .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); }
+            input { width: 100%; padding: 14px; margin: 15px 0; border: 2px solid #ddd; border-radius: 10px; box-sizing: border-box; text-align: center; }
+            button { background: #0088cc; color: white; border: none; padding: 14px; width: 100%; border-radius: 10px; font-weight: bold; cursor: pointer; }
         </style>
     </head>
     <body>
         <div class="card">
-            <h3>🔓 تفعيل الاشتراك</h3>
-            <input type="text" id="vcode" placeholder="أدخل كود التفعيل">
+            <h3>🔒 تفعيل آمن</h3>
+            <p>أدخل كود التفعيل لإرساله للإدارة</p>
+            <input type="text" id="code" placeholder="XXXX-XXXX">
             <button onclick="send()">إرسال الطلب</button>
         </div>
         <script>
             const tg = window.Telegram.WebApp;
             function send() {
-                const code = document.getElementById('vcode').value;
-                if(!code) return alert("أدخل الكود أولاً");
+                const c = document.getElementById('code').value;
+                if(!c) return;
                 fetch('/submit_code', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ user_id: tg.initDataUnsafe.user.id, code: code })
-                }).then(() => {
-                    tg.close();
-                });
+                    body: JSON.stringify({ user_id: tg.initDataUnsafe.user.id, code: c })
+                }).then(() => tg.close());
             }
         </script>
     </body>
@@ -215,11 +215,8 @@ def activation_page():
 def submit_code():
     data = request.get_json(force=True)
     asyncio.run_coroutine_threadsafe(
-        application.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=f"🎟️ <b>طلب تفعيل</b>\n👤 المستخدم: <code>{data.get('user_id')}</code>\n🔑 الكود: <code>{data.get('code')}</code>",
-            parse_mode=ParseMode.HTML
-        ), main_loop
+        application.bot.send_message(chat_id=ADMIN_ID, text=f"🎟️ كود جديد من <code>{data['user_id']}</code>: <code>{data['code']}</code>", parse_mode=ParseMode.HTML), 
+        main_loop
     )
     return jsonify({"status": "ok"}), 200
 
@@ -229,12 +226,10 @@ def trading_webhook(token, target_id):
     try:
         data = request.get_json(force=True)
         with conn.cursor() as cur:
-            # التحقق من الـ Token والارتباط بالقناة
             cur.execute("SELECT 1 FROM users u JOIN entities e ON u.user_id = e.user_id WHERE u.secret_token = %s AND e.entity_id = %s", (token, str(target_id)))
             if not cur.fetchone(): return jsonify({"status": "unauthorized"}), 403
         
-        msg = (f"🔔 <b>تنبيه تداول!</b>\n\n📈 العملة: <code>{data.get('ticker', 'N/A')}</code>\n"
-               f"⚡ النوع: <b>{data.get('action', 'N/A')}</b>\n💰 السعر: <code>{data.get('price', 'N/A')}</code>")
+        msg = f"🔔 <b>تنبيه!</b>\n\n📈 <code>{data.get('ticker')}</code>\n⚡ <b>{data.get('action')}</b>\n💰 <code>{data.get('price')}</code>"
         asyncio.run_coroutine_threadsafe(application.bot.send_message(chat_id=target_id, text=msg, parse_mode=ParseMode.HTML), main_loop)
         return jsonify({"status": "success"}), 200
     except: return jsonify({"status": "error"}), 500
