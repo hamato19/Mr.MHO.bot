@@ -33,13 +33,13 @@ STRINGS = {
         'intro': "🤖 <b>مرحباً بك في Profit Hook!</b>\nنظام ربط TradingView بتلجرام.",
         'welcome': "🏠 <b>القائمة الرئيسية:</b>",
         'buy_menu': "🛒 <b>تفعيل الاشتراك:</b>\nيمكنك الاشتراك عبر الرابط أو إرسال الكود للدعم عبر النافذة الآمنة.",
-        'acc_info': "👤 <b>بيانات حسابك:</b>\n\n- معرف المستخدم: <code>{uid}</code>\n- القنوات المفعلة: <code>{ch_count}</code>\n- أيام الاشتراك: <code>0</code>\n- إشارات متبقية مجانية: <code>100</code>",
-        'add_ch_msg': "📢 <b>إضافة قناة جديدة:</b>\n\nاضغط على الزر بالأسفل لاختيار قناة من حسابك ومشاركتها مع البوت ليتم ربطها تلقائياً.",
+        'acc_info': "👤 <b>بيانات حسابك:</b>\n\n- معرف المستخدم: <code>{uid}</code>\n- القنوات المفعلة: <code>{ch_count}</code>\n- الرمز السري: <code>{token}</code>",
+        'add_ch_msg': "📢 <b>إضافة قناة جديدة:</b>\nاضغط على الزر بالأسفل لاختيار قناة من حسابك.",
         'no_ch': "❌ لا يوجد قنوات مرتبطة حالياً.",
-        'no_ch_gen': "⚠️ يجب إضافة قناة واحدة على الأقل قبل توليد رمز أمان جديد لضمان عمل روابط الويب هوك.",
+        'no_ch_gen': "⚠️ يجب إضافة قناة واحدة على الأقل قبل توليد رمز أمان جديد.",
         'btns': {
             'acc': "👤 حسابي", 'buy': "🛒 تفعيل الاشتراك", 'my_ch': "📺 قنواتي",
-            'add_ch': "📢 إضافة قناة", 'token': "🔄 توليد رمز أمان جديد", 'wh': "🌐 روابط الويب هوك", 
+            'add_ch': "📢 إضافة قناة", 'token': "🔄 توليد رمز جديد", 'wh': "🌐 روابط الويب هوك", 
             'how': "▶️ طريقة الاستخدام", 'lang': "🌍 English", 'support': "☎️ الدعم", 
             'tv': "📊 الشارت (TradingView)", 'back': "🏠 القائمة الرئيسية", 
             'send_code': "🎟️ إرسال كود التفعيل", 'sub_link': "🔗 رابط الاشتراك",
@@ -67,7 +67,7 @@ async def get_main_menu(lang):
     B = STRINGS['العربية']['btns']
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(B['acc'], callback_data='acc'), InlineKeyboardButton(B['buy'], callback_data='buy_menu')],
-        [InlineKeyboardButton(B['add_ch'], callback_data='add_channel'), InlineKeyboardButton(B['my_ch'], callback_data='my_channels')],
+        [InlineKeyboardButton(B['add_ch'], callback_data='add_channel'), InlineKeyboardButton(B['my_ch'], callback_data='url')],
         [InlineKeyboardButton(B['wh'], callback_data='url'), InlineKeyboardButton(B['token'], callback_data='gen_token')],
         [InlineKeyboardButton(B['tv'], web_app=WebAppInfo(url="https://www.tradingview.com/chart/"))],
         [InlineKeyboardButton(B['lang'], callback_data='change_lang'), InlineKeyboardButton(B['how'], url="https://servernet.ct.ws")],
@@ -85,11 +85,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = update.effective_user.id
     await query.answer()
+    user = await get_user_data(uid)
     B = STRINGS['العربية']['btns']
 
     if query.data == 'home':
         await query.edit_message_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu('العربية'), parse_mode=ParseMode.HTML)
     
+    elif query.data == 'acc':
+        conn = get_db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM entities WHERE user_id = %s", (str(uid),))
+                count = cur.fetchone()[0]
+            txt = STRINGS['العربية']['acc_info'].format(uid=uid, ch_count=count, token=user['secret_token'])
+            await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(B['back'], callback_data='home')]]))
+        finally: release_db_conn(conn)
+
     elif query.data == 'buy_menu':
         kb = [[InlineKeyboardButton(B['sub_link'], url="https://servernet.ct.ws")],
               [InlineKeyboardButton(B['send_code'], web_app=WebAppInfo(url=f"{DOMAIN}/activation_page"))],
@@ -102,31 +113,74 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
         await context.bot.send_message(chat_id=uid, text=STRINGS['العربية']['add_ch_msg'], reply_markup=reply_markup, parse_mode=ParseMode.HTML)
 
+    elif query.data == 'url':
+        conn = get_db_conn()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
+                ents = cur.fetchall()
+            if not ents:
+                await query.edit_message_text(STRINGS['العربية']['no_ch'], reply_markup=await get_main_menu('العربية'))
+            else:
+                txt = "🌐 <b>روابط الويب هوك الخاصة بك:</b>\n"
+                kb = []
+                for e in ents:
+                    eid = e['entity_id']
+                    webhook = f"{DOMAIN}/webhook/{user['secret_token']}/{eid}"
+                    txt += f"\n📍 ID: <code>{eid}</code>\n🔗 <code>{webhook}</code>\n"
+                    kb.append([InlineKeyboardButton(f"🗑️ حذف {eid}", callback_data=f"del_{eid}")])
+                kb.append([InlineKeyboardButton(B['back'], callback_data='home')])
+                await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup(kb))
+        finally: release_db_conn(conn)
+
+    elif query.data.startswith('del_'):
+        target = query.data.split('_')[1]
+        conn = get_db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (str(uid), target))
+                conn.commit()
+            await query.answer("✅ تم الحذف بنجاح")
+            # إعادة تحويل المستخدم لعرض القنوات المتبقية
+            query.data = 'url'
+            await button_callback(update, context)
+        finally: release_db_conn(conn)
+
+    elif query.data == 'gen_token':
+        new_token = secrets.token_hex(8)
+        conn = get_db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
+                conn.commit()
+            await query.answer("🔄 تم تحديث رمز الأمان")
+            query.data = 'url' # عرض الروابط الجديدة فوراً
+            await button_callback(update, context)
+        finally: release_db_conn(conn)
+
+# --- دالة handle_message ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_user or not update.message: return
     uid = update.effective_user.id
     state = context.user_data.get('state')
     
-    if state == 'wait_ch':
-        target_id = None
-        if update.message.chat_shared:
-            target_id = str(update.message.chat_shared.chat_id)
+    if state == 'wait_ch' and update.message.chat_shared:
+        target_id = str(update.message.chat_shared.chat_id)
+        if not target_id.startswith('-100'): target_id = f"-100{target_id}"
         
-        if target_id:
-            if not target_id.startswith('-100'): target_id = f"-100{target_id}"
-            conn = get_db_conn()
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s)", (str(uid), target_id))
-                    conn.commit()
-                await update.message.reply_text(f"✅ تم الربط: <code>{target_id}</code>", parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
-                context.user_data['state'] = None
-            except:
-                await update.message.reply_text("❌ مضافة مسبقاً.")
-            finally: release_db_conn(conn)
+        conn = get_db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s)", (str(uid), target_id))
+                conn.commit()
+            await update.message.reply_text(f"✅ تم ربط القناة بنجاح!\nID: <code>{target_id}</code>", parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
+            await update.message.reply_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu('العربية'), parse_mode=ParseMode.HTML)
+            context.user_data['state'] = None
+        except:
+            await update.message.reply_text("❌ هذه القناة مضافة بالفعل.")
+        finally: release_db_conn(conn)
 
-# --- Flask & Web App Logic ---
-
+# --- مسارات Flask و Web App ---
 @app.route('/activation_page')
 def activation_page():
     return '''
@@ -139,28 +193,29 @@ def activation_page():
         <style>
             body { font-family: sans-serif; padding: 20px; text-align: center; background: #f4f7f9; }
             .card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-            input { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-            button { background: #0088cc; color: white; border: none; padding: 12px; width: 100%; border-radius: 8px; font-weight: bold; cursor: pointer; }
+            input { width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; text-align:center; }
+            button { background: #0088cc; color: white; border: none; padding: 12px; width: 100%; border-radius: 8px; font-weight: bold; }
         </style>
     </head>
     <body>
         <div class="card">
             <h3>🔓 تفعيل الاشتراك</h3>
-            <p>أدخل الكود وسيصل للأدمن فوراً</p>
-            <input type="text" id="vcode" placeholder="أدخل كود التفعيل هنا">
-            <button onclick="send()">إرسال الآن</button>
+            <input type="text" id="vcode" placeholder="أدخل كود التفعيل">
+            <button onclick="send()">إرسال للأدمن</button>
         </div>
         <script>
             const tg = window.Telegram.WebApp;
-            tg.expand();
             function send() {
                 const code = document.getElementById('vcode').value;
-                if(!code) return alert("يرجى إدخال الكود");
+                if(!code) return alert("أدخل الكود");
                 fetch('/submit_code', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ user_id: tg.initDataUnsafe.user.id, code: code })
-                }).then(() => tg.close());
+                }).then(() => {
+                    tg.showScanQrPopup({text: "تم الإرسال بنجاح"});
+                    setTimeout(() => tg.close(), 1000);
+                });
             }
         </script>
     </body>
@@ -178,6 +233,22 @@ def submit_code():
         ), main_loop
     )
     return jsonify({"status": "ok"}), 200
+
+@app.route('/webhook/<token>/<target_id>', methods=['POST'])
+def trading_webhook(token, target_id):
+    conn = get_db_conn()
+    try:
+        data = request.get_json(force=True)
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM users WHERE secret_token = %s", (token,))
+            if not cur.fetchone(): return jsonify({"status": "unauthorized"}), 403
+        
+        msg = (f"🔔 <b>تنبيه تداول!</b>\n\n📈 العملة: <code>{data.get('ticker', 'N/A')}</code>\n"
+               f"⚡ النوع: <b>{data.get('action', 'N/A')}</b>\n💰 السعر: <code>{data.get('price', 'N/A')}</code>")
+        asyncio.run_coroutine_threadsafe(application.bot.send_message(chat_id=target_id, text=msg, parse_mode=ParseMode.HTML), main_loop)
+        return jsonify({"status": "success"}), 200
+    except: return jsonify({"status": "error"}), 500
+    finally: release_db_conn(conn)
 
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
