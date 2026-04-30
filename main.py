@@ -138,15 +138,25 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 txt += f"\n📍 القناة: <code>{e['entity_id']}</code>\n🔗 <code>{wh}</code>\n"
             await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(B['back'], callback_data='home')]]))
 
-    elif query.data == 'gen_token':
-        new_token = secrets.token_hex(8)
+        elif query.data == 'gen_token':
         with get_db() as conn:
             with conn.cursor() as cur:
-                cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
+                cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (secrets.token_hex(8), str(uid)))
                 conn.commit()
-        await query.answer("✅ تم إصدار رمز جديد وتحديث الروابط بنجاح", show_alert=True)
+        await query.answer("✅ تم تحديث الرمز والروابط!", show_alert=True)
         query.data = 'view_webhooks'
         await button_callback(update, context)
+
+    elif query.data.startswith('del_'):
+        target = query.data.split('_')[1]
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (str(uid), target))
+                conn.commit()
+        await query.answer("🗑️ تم الحذف")
+        query.data = 'view_channels'
+        await button_callback(update, context)
+
 
     elif query.data.startswith('del_'):
         target = query.data.split('_')[1]
