@@ -32,7 +32,7 @@ STRINGS = {
         'intro': "🤖 <b>مرحباً بك في Profit Hook!</b>\nنظام ربط TradingView بتلجرام.",
         'welcome': "🏠 <b>القائمة الرئيسية:</b>",
         'buy_menu': "🛒 <b>تفعيل الاشتراك:</b>\nيمكنك الاشتراك عبر الرابط أو إرسال الكود للدعم.",
-        'acc_info': "👤 <b>بيانات حسابك:</b>\n🆔 ID: <code>{uid}</code>\n🔑 Token: <code>{token}</code>",
+        'acc_info': "👤 <b>بيانات حسابك:</b>\n\n- معرف المستخدم: <code>{uid}</code>\n- القنوات المفعلة: <code>{ch_count}</code>\n- أيام الاشتراك: <code>0</code>\n- إشارات متبقية مجانية: <code>100</code>",
         'add_ch_msg': "📢 <b>أرسل معرف القناة:</b>\nأرسل أرقاماً فقط (بدون رموز أو شرطة).\nمثال: <code>123456789</code>",
         'no_ch': "❌ لا يوجد قنوات مرتبطة حالياً.",
         'no_ch_gen': "⚠️ يجب إضافة قناة أولاً قبل توليد رمز أمان جديد.",
@@ -48,12 +48,12 @@ STRINGS = {
         'intro': "🤖 <b>Welcome to Profit Hook!</b>",
         'welcome': "🏠 <b>Main Menu:</b>",
         'buy_menu': "🛒 <b>Activation:</b>",
-        'acc_info': "👤 <b>Account:</b>\n🆔 ID: <code>{uid}</code>\n🔑 Token: <code>{token}</code>",
+        'acc_info': "👤 <b>Account Info:</b>\n\n- User ID: <code>{uid}</code>\n- Active Channels: <code>{ch_count}</code>\n- Subscription Days: <code>0</code>\n- Remaining Free Signals: <code>100</code>",
         'add_ch_msg': "📢 <b>Send Channel ID:</b>\nNumbers only.\nExample: <code>123456789</code>",
         'no_ch': "❌ No linked channels.",
         'no_ch_gen': "⚠️ Add a channel first before generating a token.",
         'btns': {
-            'acc': "👤 Account", 'buy': "🛒 Activation", 'my_ch': "📺 My Channels",
+            'acc': "👤 My Account", 'buy': "🛒 Activation", 'my_ch': "📺 My Channels",
             'add_ch': "📢 Add Channel", 'token': "🔄 New Token", 'wh': "🌐 Webhook Links", 
             'how': "▶️ Tutorial", 'lang': "🌍 العربية", 'support': "☎️ Support", 
             'tv': "📊 Chart (TradingView)", 'back': "🏠 Main Menu",
@@ -89,6 +89,12 @@ async def get_main_menu(lang):
     ])
 
 # --- الـ Handlers ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = await get_user_data(update.effective_user.id)
+    lang = user['language']
+    await update.message.reply_text(STRINGS[lang]['intro'], parse_mode=ParseMode.HTML)
+    await update.message.reply_text(STRINGS[lang]['welcome'], reply_markup=await get_main_menu(lang), parse_mode=ParseMode.HTML)
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = update.effective_user.id
@@ -101,8 +107,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(STRINGS[lang]['welcome'], reply_markup=await get_main_menu(lang), parse_mode=ParseMode.HTML)
     
     elif query.data == 'acc':
-        txt = STRINGS[lang]['acc_info'].format(uid=uid, token=user['secret_token'])
-        await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(B['back'], callback_data='home')]]))
+        conn = get_db_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM entities WHERE user_id = %s", (str(uid),))
+                ch_count = cur.fetchone()[0]
+            txt = STRINGS[lang]['acc_info'].format(uid=uid, ch_count=ch_count)
+            await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(B['back'], callback_data='home')]]))
+        finally: release_db_conn(conn)
 
     elif query.data == 'buy_menu':
         kb = [[InlineKeyboardButton(B['sub_link'], url="https://servernet.ct.ws")],
@@ -178,13 +190,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         release_db_conn(conn)
         await query.edit_message_text(STRINGS[new_lang]['welcome'], reply_markup=await get_main_menu(new_lang), parse_mode=ParseMode.HTML)
 
-# --- بقية الـ Handlers والـ Webhooks كما هي في كودك الأصلي ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = await get_user_data(update.effective_user.id)
-    lang = user['language']
-    await update.message.reply_text(STRINGS[lang]['intro'], parse_mode=ParseMode.HTML)
-    await update.message.reply_text(STRINGS[lang]['welcome'], reply_markup=await get_main_menu(lang), parse_mode=ParseMode.HTML)
-
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     state = context.user_data.get('state')
@@ -212,6 +217,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['state'] = None
         await update.message.reply_text("✅ تم إرسال طلبك للدعم الفني بنجاح.", reply_markup=await get_main_menu(lang))
 
+# --- Flask Webhooks ---
 @app.route('/telegram', methods=['POST'])
 def telegram_webhook():
     update_data = request.get_json(force=True)
