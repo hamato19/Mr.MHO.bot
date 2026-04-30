@@ -156,7 +156,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 txt += f"\n📍 القناة: <code>{e['entity_id']}</code>\n🔗 <code>{DOMAIN}/webhook/{token}/{e['entity_id']}</code>\n"
             await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(B['back'], callback_data='home')]]))
 
+
 # --- مسارات الويب (Flask) ---
+
+@app.route('/')
+def index():
+    return "Bot is running perfectly!", 200
 
 @app.route('/activation_page')
 def activation_page():
