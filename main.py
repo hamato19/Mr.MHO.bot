@@ -190,30 +190,62 @@ def activation_page():
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def trading_webhook(token, target_id):
     try:
+        # 1. استقبال البيانات بصيغة JSON
         data = request.get_json(force=True)
+        if not data:
+            return jsonify({"status": "error", "message": "No data provided"}), 400
+
+        # 2. التحقق من صلاحية التوكن وربطه بالقناة المطلوبة في قاعدة البيانات
         with get_db() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM users u JOIN entities e ON u.user_id = e.user_id WHERE u.secret_token = %s AND e.entity_id = %s", (token, str(target_id)))
-                if not cur.fetchone(): return jsonify({"status": "unauthorized"}), 403
+                cur.execute("""
+                    SELECT 1 FROM users u 
+                    JOIN entities e ON u.user_id = e.user_id 
+                    WHERE u.secret_token = %s AND e.entity_id = %s
+                """, (token, str(target_id)))
+                
+                if not cur.fetchone():
+                    logging.warning(f"Unauthorized webhook attempt: Token {token} for ID {target_id}")
+                    return jsonify({"status": "unauthorized"}), 403
 
-        # معالجة الإشارة المتقدمة
+        # 3. معالجة نوع الإشارة (شراء أو بيع) لتحديد الأيقونة والنص
+        # يدعم: buy, buy+, long | sell, sell-, short
         sig = str(data.get('signal', '')).lower()
-        icon = "🔴" if "sel" in sig else "🟢"
-        act = "بيـع (SELL)" if "sel" in sig else "شـراء (BUY)"
+        if any(x in sig for x in ['buy', 'long']):
+            icon = "🟢"
+            action_text = "شـراء (BUY)"
+        elif any(x in sig for x in ['sell', 'short']):
+            icon = "🔴"
+            action_text = "بيـع (SELL)"
+        else:
+            icon = "⚪"
+            action_text = "تنبيه (ALERT)"
 
+        # 4. تنسيق الرسالة النهائية لتظهر في تلجرام
         msg = (
             f"{icon} <b>تنبيه تداول جديد!</b>\n\n"
             f"📊 الأداة: <code>{data.get('ticker', 'N/A')}</code>\n"
-            f"⚡ العملية: <b>{act}</b>\n"
-            f"🏷️ النوع: <code>{data.get('type', 'N/A')}</code>\n"
+            f"⚡ العملية: <b>{action_text}</b>\n"
             f"💰 السعر: <code>{data.get('price', 'N/A')}</code>\n"
-            f"📦 الكمية: <code>{data.get('quantity', '100%')}</code>\n"
-            f"📝 ملاحظة: <b>{data.get('msg', 'N/A')}</b>"
+            f"🎯 هدف (TP): <b>{data.get('tp', 'N/A')}</b>\n"
+            f"🛑 وقف (SL): <b>{data.get('sl', 'N/A')}</b>\n"
+            f"🔥 القوة: <code>{data.get('trade_power', 'N/A')}</code>\n"
+            f"⏳ إغلاق آلي: <code>{data.get('auto_close', 'N/A')}</code>\n"
+            f"📝 ملاحظة: <i>{data.get('msg', 'لا يوجد')}</i>"
         )
 
-        if main_loop:
-            asyncio.run_coroutine_threadsafe(application.bot.send_message(chat_id=target_id, text=msg, parse_mode=ParseMode.HTML), main_loop)
-            return jsonify({"status": "success"}), 200
+        # 5. إرسال الرسالة إلى تلجرام عبر الحلقة البرمجية الرئيسية (Async)
+        if main_loop and application:
+            asyncio.run_coroutine_threadsafe(
+                application.bot.send_message(
+                    chat_id=target_id, 
+                    text=msg, 
+                    parse_mode=ParseMode.HTML
+                ), 
+                main_loop
+            )
+            return jsonify({"status": "success", "sent_to": target_id}), 200
+        else:
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
