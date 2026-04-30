@@ -235,7 +235,19 @@ def trading_webhook(token, target_id):
             cur.execute("SELECT 1 FROM users u JOIN entities e ON u.user_id = e.user_id WHERE u.secret_token = %s AND e.entity_id = %s", (token, str(target_id)))
             if not cur.fetchone(): return jsonify({"status": "unauthorized"}), 403
 
-        real_chat_id = f"-100{target_id}" if not str(target_id).startswith('-') else target_id
+                # جلب المعرف من قاعدة البيانات (target_id هنا هو 1003806611748)
+        target_str = str(target_id)
+        
+        # التعديل الذكي: بما أن الرقم يبدأ بـ 100، سنضيف فقط علامة السالب
+        if target_str.startswith('100'):
+            real_chat_id = f"-{target_str}" 
+        elif not target_str.startswith('-'):
+            real_chat_id = f"-100{target_str}"
+        else:
+            real_chat_id = target_str
+
+        # الآن سيصبح real_chat_id هو -1003806611748 وهو المعرف الصحيح
+
         msg = (f"🔔 <b>تنبيه تداول جديد!</b>\n\n"
                f"📈 العملة: <code>{data.get('ticker', 'N/A')}</code>\n"
                f"⚡ النوع: <b>{data.get('action', 'N/A')}</b>\n"
