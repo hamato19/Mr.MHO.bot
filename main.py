@@ -3,6 +3,7 @@ import logging
 import secrets
 import asyncio
 import threading
+import re
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from flask import Flask, request, jsonify
@@ -33,7 +34,7 @@ STRINGS = {
         'welcome': "🏠 <b>القائمة الرئيسية:</b>",
         'buy_menu': "🛒 <b>تفعيل الاشتراك:</b>\nيمكنك الاشتراك عبر الرابط أو إرسال الكود للدعم.",
         'acc_info': "👤 <b>بيانات حسابك:</b>\n\n- معرف المستخدم: <code>{uid}</code>\n- القنوات المفعلة: <code>{ch_count}</code>\n- أيام الاشتراك: <code>0</code>\n- إشارات متبقية مجانية: <code>100</code>",
-        'add_ch_msg': "📢 <b>أرسل معرف القناة الآن:</b>\nتأكد من كتابته بالشرطة (مثال: <code>-100123456789</code>)",
+        'add_ch_msg': "📢 <b>أرسل بيانات القناة الآن:</b>\n- يمكنك إرسال الـ ID مباشرة.\n- أو عمل Forward لرسالة من القناة هنا.\n- أو إرسال رابط القناة.",
         'no_ch': "❌ لا يوجد قنوات مرتبطة حالياً.",
         'no_ch_gen': "⚠️ يجب إضافة قناة أولاً قبل توليد رمز أمان جديد.",
         'btns': {
@@ -49,7 +50,7 @@ STRINGS = {
         'welcome': "🏠 <b>Main Menu:</b>",
         'buy_menu': "🛒 <b>Activation:</b>",
         'acc_info': "👤 <b>Account Info:</b>\n\n- User ID: <code>{uid}</code>\n- Active Channels: <code>{ch_count}</code>\n- Subscription Days: <code>0</code>\n- Remaining Free Signals: <code>100</code>",
-        'add_ch_msg': "📢 <b>Send Channel ID:</b>\nInclude the dash (Example: <code>-100123456789</code>)",
+        'add_ch_msg': "📢 <b>Send Channel Data:</b>\n- Send ID directly.\n- Forward a message from the channel.\n- Or send channel link.",
         'no_ch': "❌ No linked channels.",
         'no_ch_gen': "⚠️ Add a channel first before generating a token.",
         'btns': {
@@ -187,6 +188,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         release_db_conn(conn)
         await query.edit_message_text(STRINGS[new_lang]['welcome'], reply_markup=await get_main_menu(new_lang), parse_mode=ParseMode.HTML)
 
+# --- نظام التعرف الذكي ونظام الشرطة ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     state = context.user_data.get('state')
@@ -194,17 +196,62 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = user['language']
 
     if state == 'wait_ch':
-        raw = update.message.text.strip()
-        # تقبل النص كما هو (بالشرطة) لتخزينه
+        target_id = None
+        
+        # 1. التحقق إذا كانت الرسالة "Forward" من قناة
+        if update.message.forward_from_chat:
+            target_id = str(update.message.forward_from_chat.id)
+            
+        # 2. التحقق من النص المرسل (رابط أو ID يدوي)
+        elif update.message.text:
+            text = update.message.text.strip()
+            
+            # إذا كان رابط قناة خاصة (t.me/c/123456789/...)
+            if "t.me/c/" in text:
+                match = re.search(r't\.me/c/(\d+)', text)
+                if match:
+                    target_id = f"-100{match.group(1)}"
+            
+            # إذا كان مجرد أرقام (إضافة -100 تلقائياً)
+            elif text.isdigit():
+                target_id = f"-100{text}"
+            
+            # إذا كان يبدأ بالشرطة أو المعرف الرقمي الصحيح
+            elif text.startswith('-'):
+                target_id = text
+            else:
+                target_id = text # محاولة استخدامه كما هو
+
+        if not target_id:
+            await update.message.reply_text("❌ لم يتم التعرف على معرف القناة. يرجى إرسال الـ ID أو عمل Forward لرسالة.")
+            return
+
+        # ضمان وجود -100 في بداية المعرف للقنوات
+        if not target_id.startswith('-100') and target_id.lstrip('-').isdigit():
+            # إذا كان رقم سالب ولكنه لا يبدأ بـ -100
+            if target_id.startswith('-'):
+                 target_id = f"-100{target_id.lstrip('-')}"
+            else:
+                 target_id = f"-100{target_id}"
+
         conn = get_db_conn()
         try:
             with conn.cursor() as cur:
-                cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s)", (str(uid), raw))
+                cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s)", (str(uid), target_id))
                 conn.commit()
             context.user_data['state'] = None
-            await update.message.reply_text(f"✅ تم ربط القناة <code>{raw}</code> بنجاح!", parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(lang))
-        except: await update.message.reply_text("❌ هذا المعرف مسجل مسبقاً أو حدث خطأ.")
-        finally: release_db_conn(conn)
+            
+            # توليد الرابط المباشر
+            wh_url = f"{DOMAIN}/webhook/{user['secret_token']}/{target_id}"
+            success_msg = (f"✅ <b>تم ربط القناة بنجاح!</b>\n\n"
+                           f"📍 المعرف: <code>{target_id}</code>\n"
+                           f"🔗 رابط الويب هوك:\n<code>{wh_url}</code>")
+            
+            await update.message.reply_text(success_msg, parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(lang))
+        except: 
+            await update.message.reply_text("❌ هذا المعرف مسجل مسبقاً أو غير صالح.")
+        finally: 
+            release_db_conn(conn)
 
     elif state == 'wait_code':
         code = update.message.text
@@ -226,7 +273,6 @@ def trading_webhook(token, target_id):
     conn = get_db_conn()
     try:
         data = request.get_json(force=True)
-        # البحث في قاعدة البيانات بنفس المعرف المستلم (سواء كان بشرطة أو بدونها)
         target_str = str(target_id)
         
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -240,7 +286,6 @@ def trading_webhook(token, target_id):
                f"⚡ النوع: <b>{data.get('action', 'N/A')}</b>\n"
                f"💰 السعر: <code>{data.get('price', 'N/A')}</code>")
         
-        # الإرسال للتلجرام مباشرة بالمعرف المستلم (الذي يحتوي على الشرطة)
         asyncio.run_coroutine_threadsafe(application.bot.send_message(chat_id=target_str, text=msg, parse_mode=ParseMode.HTML), main_loop)
         
         return jsonify({"status": "success"}), 200
@@ -257,7 +302,7 @@ async def main():
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_callback))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler((filters.TEXT | filters.FORWARDED) & ~filters.COMMAND, handle_message))
     
     await application.initialize()
     await application.start()
