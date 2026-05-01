@@ -1,26 +1,16 @@
-/* تفعيل Tailwind base */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* إعدادات عامة للخط والخلفية */
 body {
   margin: 0;
-  background-color: black; /* خلفية سوداء دائمة */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  background-color: #000000;
+  color: #ffffff;
+  overflow: hidden; /* لمنع التمرير العشوائي */
+  user-select: none;
 }
 
-/* تحسين شكل حقول الأرقام */
-input[type="number"] {
-  outline: none;
-  -moz-appearance: textfield;
-}
-
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+/* تأثير التوهج للأزرار */
+.glow-button {
+  box-shadow: 0 0 15px rgba(222, 255, 154, 0.2);
 }
