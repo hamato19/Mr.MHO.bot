@@ -1,29 +1,23 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import Header from './components/Header';
 import SettingsForm from './components/SettingsForm';
-import './index.css';
 
 function App() {
-  useEffect(() => {
-    const tg = window.Telegram.WebApp;
-    if (tg) {
-      tg.ready();
-      tg.expand(); // لفتح التطبيق بكامل الشاشة
-      tg.setHeaderColor('#000000'); // لون شريط التليجرام العلوي
-    }
-  }, []);
-
   return (
-    <div className="min-h-screen bg-black text-white p-4 font-sans">
-      <Header />
-      <SettingsForm />
-      <div className="text-center mt-6">
-        <button 
-          onClick={() => window.Telegram.WebApp.close()}
-          className="text-[10px] text-gray-500 uppercase tracking-widest border border-gray-800 px-4 py-1 rounded-full"
-        >
-          اغلاق التطبيق
-        </button>
+    // استخدام flex و items-center لجعل العناصر في المنتصف
+    <div className="min-h-screen bg-black text-white flex flex-col items-center p-6 font-sans">
+      <div className="w-full max-w-md space-y-8">
+        <Header />
+        <SettingsForm />
+        
+        <div className="text-center pt-10">
+          <button 
+            onClick={() => window.Telegram.WebApp.close()}
+            className="text-[12px] text-gray-500 underline uppercase tracking-widest"
+          >
+            إغلاق التطبيق
+          </button>
+        </div>
       </div>
     </div>
   );
