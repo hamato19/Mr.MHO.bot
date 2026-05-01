@@ -1,29 +1,11 @@
-import React from 'react';
-
-const Header = () => {
-  return (
-    <div className="w-full flex flex-col items-center justify-center text-center py-4 border-b border-gray-900/50">
-      
-      {/* حاوية النص والأيقونة - نستخدم flex-row-reverse لضمان الترتيب العربي الصحيح */}
-      <div className="flex flex-row-reverse items-center justify-center gap-3">
-        {/* النص جهة اليمين */}
-        <h1 className="text-2xl font-bold text-white tracking-tight">
-          إعدادات التداول
-        </h1>
-        {/* الأيقونة جهة اليسار (أو بجانب النص مباشرة) */}
-        <span className="text-2xl animate-bounce">🔥</span>
-      </div>
-
-      {/* خط توضيحي سفلي أنيق بجانب "System Online" */}
-      <div className="flex items-center gap-2 mt-3 bg-black/50 border border-gray-800 px-4 py-1 rounded-full shadow-lg">
-        <div className="w-2 h-2 bg-[#deff9a] rounded-full animate-pulse shadow-[0_0_8px_#deff9a]"></div>
-        <span className="text-[10px] text-gray-500 uppercase tracking-[0.2em] font-medium">
-          Aram System Active
-        </span>
-      </div>
-      
+const Header = () => (
+  <div className="flex flex-col items-center text-center py-4">
+    <h1 className="text-3xl font-black tracking-tighter">
+      Mr. MOH <span className="text-[#deff9a]">Smart</span> 🔥
+    </h1>
+    <div className="flex items-center gap-2 mt-2 bg-gray-900/50 px-3 py-1 rounded-full border border-gray-800">
+      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+      <span className="text-[10px] text-gray-400 uppercase">System Online</span>
     </div>
-  );
-};
-
-export default Header;
+  </div>
+);
