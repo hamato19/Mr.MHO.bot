@@ -85,7 +85,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         await query.edit_message_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
     
-        elif data == 'buy_menu':
+        elif data == 'buy_menu': # الآن الـ elif صحيحة
         await query.answer()
         
         # 1. إعداد أزرار لوحة المفاتيح (الوحيدة التي تدعم sendData)
