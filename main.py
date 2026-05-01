@@ -16,7 +16,12 @@ DB_URL = os.getenv('DB_URL', "postgresql://neondb_owner:npg_blCh1ULJxyG9@ep-damp
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_ID = os.getenv('ADMIN_ID') 
 DOMAIN = os.getenv('DOMAIN', "https://mr-mho-bot-hewc.onrender.com")
-ADMIN_ID = int(ADMIN_ID) if ADMIN_ID else 0
+
+# تحويل الآيدي لرقم لضمان الإرسال
+try:
+    ADMIN_ID = int(ADMIN_ID) if ADMIN_ID else 0
+except:
+    ADMIN_ID = 0
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -65,6 +70,7 @@ async def get_main_menu():
 
 # --- الـ Handlers الأساسية ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_user: return
     uid = update.effective_user.id
     with get_db() as conn:
         with conn.cursor() as cur:
@@ -77,6 +83,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    if not update.effective_user: return
     uid = update.effective_user.id
     B = STRINGS['العربية']['btns']
     data = query.data
@@ -85,30 +92,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         await query.edit_message_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
     
-        elif data == 'buy_menu': # الآن الـ elif صحيحة
+    elif data == 'buy_menu':
         await query.answer()
-        
-        # 1. إعداد أزرار لوحة المفاتيح (الوحيدة التي تدعم sendData)
+        # استخدام لوحة مفاتيح (ReplyKeyboard) لضمان عمل WebApp sendData
         kb_reply = [
             [KeyboardButton("🎟️ إرسال كود التفعيل", web_app=WebAppInfo(url=f"{DOMAIN}/activation_page"))],
             [KeyboardButton("🏠 العودة للقائمة الرئيسية")]
         ]
-        
-        # 2. حذف رسالة القائمة القديمة لتجنب تشتت المستخدم
         try:
             await query.delete_message()
         except:
             pass
             
-        # 3. إرسال الرسالة الجديدة مع رابط الاشتراك وزر التفعيل بالأسفل
         await context.bot.send_message(
             chat_id=uid,
             text=(
                 "🛒 <b>تفعيل الاشتراك</b>\n\n"
-                "🔗 يمكنك الحصول على كود التفعيل عبر موقعنا:\n"
-                "https://servernet.ct.ws\n\n"
-                "💡 <b>طريقة التفعيل:</b>\n"
-                "اضغط على الزر الأزرق الموجود في أسفل الشاشة لإدخال الكود وإرساله مباشرة للإدارة."
+                "🔗 يمكنك الحصول على الكود عبر: <a href='https://servernet.ct.ws'>موقعنا</a>\n\n"
+                "💡 اضغط على الزر بالأسفل لإرسال الكود."
             ),
             reply_markup=ReplyKeyboardMarkup(kb_reply, resize_keyboard=True, one_time_keyboard=True),
             parse_mode=ParseMode.HTML
@@ -129,16 +130,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with conn.cursor() as cur:
                 cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
                 conn.commit()
-        await query.answer("✅ تم تحديث الرمز بنجاح!")
-        await query.edit_message_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
-
-    elif data.startswith('del_'):
-        target_del = data.replace('del_', '')
-        with get_db() as conn:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (str(uid), target_del))
-                conn.commit()
-        await query.answer("🗑️ تم الحذف")
+        await query.answer("✅ تم تحديث الرمز!")
         await query.edit_message_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
 
     elif data == 'add_channel':
@@ -179,7 +171,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 txt += f"\n📍 القناة: <code>{e['entity_id']}</code>\n🔗 <code>{DOMAIN}/webhook/{token}/{e['entity_id']}</code>\n"
             await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(B['back'], callback_data='home')]]))
 
-
 # --- مسارات الويب (Flask) ---
 
 @app.route('/')
@@ -192,8 +183,7 @@ def activation_page():
     <!DOCTYPE html>
     <html dir="rtl">
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
         <script src="https://telegram.org/js/telegram-web-app.js"></script>
         <style>
             body { font-family: sans-serif; background: #1c1c1c; color: white; text-align: center; padding: 20px; }
@@ -211,7 +201,7 @@ def activation_page():
             document.getElementById('sendBtn').onclick = function() {
                 let val = document.getElementById('code').value;
                 if(val.trim() !== "") {
-                    tg.sendData(val); // هذه الوظيفة تتطلب KeyboardButton
+                    tg.sendData(val);
                 }
             };
         </script>
@@ -238,16 +228,13 @@ def trading_webhook(token, target_id):
             f"⚡ العملية: <b>{action}</b>\n"
             f"💰 السعر: <code>{data.get('price', 'N/A')}</code>\n"
             f"🎯 هدف (TP): <b>{data.get('tp', 'N/A')}</b>\n"
-            f"🛑 وقف (SL): <b>{data.get('sl', 'N/A')}</b>\n"
-            f"🔥 القوة: <code>{data.get('trade_power', 'N/A')}</code>\n"
-            f"⏳ إغلاق آلي: <code>{data.get('auto_close', 'N/A')}</code>"
+            f"🛑 وقف (SL): <b>{data.get('sl', 'N/A')}</b>"
         )
 
         if main_loop and application:
             asyncio.run_coroutine_threadsafe(application.bot.send_message(chat_id=target_id, text=msg, parse_mode=ParseMode.HTML), main_loop)
             return jsonify({"status": "success"}), 200
-        else:
-            return jsonify({"status": "error", "message": "Bot not ready"}), 500
+        return jsonify({"status": "error"}), 500
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -261,13 +248,24 @@ def telegram_webhook():
 
 # --- معالجة الرسائل ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_user: return
     uid = update.effective_user.id
-    if update.message and update.message.web_app_data:
-        code = update.message.web_app_data.data
-        await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 طلب تفعيل!\nمن: {uid}\nالكود: {code}")
-        await update.message.reply_text("✅ تم إرسال الكود للأدمن.")
+
+    # العودة للقائمة الرئيسية من الزر
+    if update.message and update.message.text == "🏠 العودة للقائمة الرئيسية":
+        await update.message.reply_text("🏠 تم العودة للقائمة الرئيسية", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
         return
 
+    # استلام كود التفعيل من WebApp
+    if update.message and update.message.web_app_data:
+        code = update.message.web_app_data.data
+        if ADMIN_ID != 0:
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 <b>طلب تفعيل جديد!</b>\n\n👤 المستخدم: <code>{uid}</code>\n🎟️ الكود: <code>{code}</code>", parse_mode=ParseMode.HTML)
+        await update.message.reply_text("✅ تم إرسال الكود بنجاح، سيتم التفعيل قريباً.", reply_markup=ReplyKeyboardRemove())
+        return
+
+    # ربط القنوات
     if context.user_data.get('state') == 'wait_ch' and update.message.chat_shared:
         target_id = f"-100{update.message.chat_shared.chat_id}"
         with get_db() as conn:
@@ -275,8 +273,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s)", (str(uid), target_id))
                     conn.commit()
-                    await update.message.reply_text(f"✅ تم ربط: {target_id}", reply_markup=ReplyKeyboardRemove())
-                except: await update.message.reply_text("❌ مرتبطة مسبقاً.")
+                    await update.message.reply_text(f"✅ تم ربط القناة بنجاح.", reply_markup=ReplyKeyboardRemove())
+                except: await update.message.reply_text("❌ القناة مرتبطة مسبقاً.")
         context.user_data['state'] = None
 
 async def main():
