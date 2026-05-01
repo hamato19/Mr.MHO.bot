@@ -14,8 +14,9 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 # --- الإعدادات الأساسية ---
 DB_URL = os.getenv('DB_URL', "postgresql://neondb_owner:npg_blCh1ULJxyG9@ep-damp-art-a7y2e8e5-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require")
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_ID = 8711658382 
+ADMIN_ID = os.getenv('ADMIN_ID') 
 DOMAIN = os.getenv('DOMAIN', "https://mr-mho-bot-hewc.onrender.com")
+ADMIN_ID = int(ADMIN_ID) if ADMIN_ID else 0
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -84,12 +85,34 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer()
         await query.edit_message_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
     
-    elif data == 'buy_menu':
+        elif data == 'buy_menu':
         await query.answer()
-        kb = [[InlineKeyboardButton(B['sub_link'], url="https://servernet.ct.ws")],
-              [InlineKeyboardButton(B['send_code'], web_app=WebAppInfo(url=f"{DOMAIN}/activation_page"))],
-              [InlineKeyboardButton(B['back'], callback_data='home')]]
-        await query.edit_message_text(STRINGS['العربية']['buy_menu'], reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+        
+        # 1. إعداد أزرار لوحة المفاتيح (الوحيدة التي تدعم sendData)
+        kb_reply = [
+            [KeyboardButton("🎟️ إرسال كود التفعيل", web_app=WebAppInfo(url=f"{DOMAIN}/activation_page"))],
+            [KeyboardButton("🏠 العودة للقائمة الرئيسية")]
+        ]
+        
+        # 2. حذف رسالة القائمة القديمة لتجنب تشتت المستخدم
+        try:
+            await query.delete_message()
+        except:
+            pass
+            
+        # 3. إرسال الرسالة الجديدة مع رابط الاشتراك وزر التفعيل بالأسفل
+        await context.bot.send_message(
+            chat_id=uid,
+            text=(
+                "🛒 <b>تفعيل الاشتراك</b>\n\n"
+                "🔗 يمكنك الحصول على كود التفعيل عبر موقعنا:\n"
+                "https://servernet.ct.ws\n\n"
+                "💡 <b>طريقة التفعيل:</b>\n"
+                "اضغط على الزر الأزرق الموجود في أسفل الشاشة لإدخال الكود وإرساله مباشرة للإدارة."
+            ),
+            reply_markup=ReplyKeyboardMarkup(kb_reply, resize_keyboard=True, one_time_keyboard=True),
+            parse_mode=ParseMode.HTML
+        )
 
     elif data == 'acc':
         await query.answer()
