@@ -165,7 +165,36 @@ def index():
 
 @app.route('/activation_page')
 def activation_page():
-    return render_template_string("<h3>🎟️ كود التفعيل</h3><input type='text' id='c'><button id='b'>إرسال</button><script>let tg=window.Telegram.WebApp;tg.expand();document.getElementById('b').onclick=()=>{tg.sendData(document.getElementById('c').value)}</script>")
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html dir="rtl">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <style>
+            body { font-family: sans-serif; background: #1c1c1c; color: white; text-align: center; padding: 20px; }
+            input { width: 90%; padding: 15px; margin: 20px 0; border-radius: 10px; border: 1px solid #444; background: #2b2b2b; color: white; font-size: 16px; }
+            button { background: #248bfe; color: white; border: none; padding: 15px; border-radius: 10px; width: 95%; font-weight: bold; cursor: pointer; }
+        </style>
+    </head>
+    <body>
+        <h3>🎟️ إرسال كود التفعيل</h3>
+        <input type="text" id="code" placeholder="أدخل الكود هنا..." autofocus>
+        <button id="sendBtn">إرسال للأدمن</button>
+        <script>
+            let tg = window.Telegram.WebApp;
+            tg.expand();
+            document.getElementById('sendBtn').onclick = function() {
+                let val = document.getElementById('code').value;
+                if(val.trim() !== "") {
+                    tg.sendData(val); // هذه الوظيفة تتطلب KeyboardButton
+                }
+            };
+        </script>
+    </body>
+    </html>
+    """)
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def trading_webhook(token, target_id):
