@@ -201,7 +201,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def trading_webhook(token, target_id):
     try:
-        data = request.get_json(force=True)
+        # 1. سحب البيانات الخام كـ Text بدلاً من JSON لتجنب مشاكل التنسيق
+        raw_data = request.get_data(as_text=True)
+        
+        # 2. التحقق من الصلاحية (نحتاج الـ JSON هنا فقط للتحقق من قاعدة البيانات)
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -209,39 +212,29 @@ def trading_webhook(token, target_id):
                     JOIN entities e ON u.user_id = e.user_id 
                     WHERE u.secret_token = %s AND e.entity_id = %s
                 """, (token, str(target_id)))
-                if not cur.fetchone(): return jsonify({"status": "unauthorized"}), 403
+                if not cur.fetchone():
+                    return jsonify({"status": "unauthorized"}), 403
 
-        # استخراج البيانات بنفس الهيكلية المطلوبة
-        ticker   = data.get('ticker', 'N/A')
-        signal   = str(data.get('signal', '')).lower()
-        st_type  = data.get('type', 'N/A')
-        quantity = data.get('quantity', 'N/A')
-        price    = data.get('price', 'N/A')
-        msg_note = data.get('msg', 'N/A')
-
-        if any(w in signal for w in ['buy', 'long']):
-            icon, action = "🟢", "شراء / BUY"
-        elif any(w in signal for w in ['sell', 'short']):
-            icon, action = "🔴", "بيع / SELL"
-        else:
-            icon, action = "⚪", signal.upper()
-
-        msg = (
-            f"{icon} <b>— تنبيه TradingView —</b>\n\n"
-            f"📊 <b>الرمز (Ticker):</b> <code>{ticker}</code>\n"
-            f"⚡ <b>الإشارة (Signal):</b> <b>{action}</b>\n"
-            f"🛠️ <b>النوع (Type):</b> <code>{st_type}</code>\n"
-            f"⚖️ <b>الكمية (Quantity):</b> <code>{quantity}</code>\n"
-            f"💰 <b>السعر (Price):</b> <code>{price}</code>\n"
-            f"📝 <b>رسالة (Msg):</b> <code>{msg_note}</code>\n\n"
-            f"🤖 @MOH_SignalsBot"
-        )
+        # 3. إرسال التنبيه كما هو تماماً
+        # سيتم إرساله داخل وسم <code> ليكون سهل النسخ وبنفس شكل التنسيق الأصلي
+        msg = f"📩 <b>تنبيه مباشر من TradingView:</b>\n\n<code>{raw_data}</code>"
 
         if main_loop and application:
-            asyncio.run_coroutine_threadsafe(application.bot.send_message(chat_id=target_id, text=msg, parse_mode=ParseMode.HTML), main_loop)
+            asyncio.run_coroutine_threadsafe(
+                application.bot.send_message(
+                    chat_id=target_id, 
+                    text=msg, 
+                    parse_mode=ParseMode.HTML
+                ), 
+                main_loop
+            )
             return jsonify({"status": "success"}), 200
+        
         return jsonify({"status": "error"}), 500
-    except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
+
+    except Exception as e:
+        logging.error(f"Webhook Error: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/activation_page')
 def activation_page():
