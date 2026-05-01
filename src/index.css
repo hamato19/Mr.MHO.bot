@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#000000] text-[#daffde] antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+}
+
+/* تخصيص مظهر شريط التمرير */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background: #deff9a;
+  border-radius: 10px;
+}
