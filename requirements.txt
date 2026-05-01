@@ -1,4 +1,14 @@
+# المكتبات الحالية في مستودعك
 flask[async]
 python-telegram-bot
 gunicorn
 psycopg2-binary
+
+# مكتبات التداول الآلي والـ API (إضافات جديدة)
+fastapi
+uvicorn
+sqlalchemy
+ccxt
+telethon
+cryptography
+python-dotenv
