@@ -22,7 +22,7 @@ main_loop = None
 async def get_main_menu(uid):
     kb = [
         [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("📢 ربط قناة", callback_data='add_ch')],
-        [InlineKeyboardButton("🌐   رابط الويب هوك", callback_data='view_wh'), InlineKeyboardButton("🔄  توليد رمز جديد", callback_data='gen_token')],
+        [InlineKeyboardButton("🌐 رابط الويب هوك", callback_data='view_wh'), InlineKeyboardButton("🔄 توليد رمز جديد", callback_data='gen_token')],
         [InlineKeyboardButton("📺 قنواتي", callback_data='view_chs')],
         [InlineKeyboardButton("🤖 إضافة البوت كمشرف", url=f"https://t.me/{application.bot.username}?startchannel=true")],
         [InlineKeyboardButton("☎️ الدعم الفني", url=f"tg://user?id={ADMIN_ID}")]
@@ -79,7 +79,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'add_ch':
         context.user_data['state'] = 'wait_ch'
         kb = [[KeyboardButton("📂 اختر القناة المراد ربطها", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))]]
-        await context.bot.send_message(chat_id=uid, text="📢 يجب أن يكون البوت مشرفاً في القناة أولاً.\nاختر القناة من القائمة أدناه:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True))
+        await context.bot.send_message(chat_id=uid, text="📢 قم باختيار القناة من القائمة لسحب الـ ID وربطها مباشرة:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True))
 
     elif data == 'view_chs':
         with get_db() as conn:
@@ -111,7 +111,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not ents:
             await query.edit_message_text("⚠️ أضف قناة أولاً.", reply_markup=await get_main_menu(uid))
         else:
-            txt = "🌐 <b>روابط الويب هوك:</b>\n"
+            txt = "🌐 <b>روابط الويب هوك الخاصة بك:</b>\n"
             for e in ents:
                 txt += f"\n📍 القناة: <code>{e['entity_id']}</code>\n🔗 <code>{DOMAIN}/webhook/{token}/{e['entity_id']}</code>\n"
             await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة", callback_data='home')]]))
@@ -166,9 +166,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    text = update.message.text.strip()
+    state = context.user_data.get('state')
 
-    if context.user_data.get('state') == 'WAIT_CODE':
+    # 1. تفعيل الأكواد (نص)
+    if state == 'WAIT_CODE' and update.message.text:
+        text = update.message.text.strip()
         success, days = await activate_with_code(uid, text)
         if success:
             context.user_data['state'] = None
@@ -176,17 +178,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await start(update, context)
         return await update.message.reply_text("❌ رمز غير صحيح.")
 
-    if context.user_data.get('state') == 'wait_ch' and update.message.chat_shared:
+    # 2. السحب المباشر لـ ID القناة عند المشاركة
+    if state == 'wait_ch' and update.message.chat_shared:
         target_id = str(update.message.chat_shared.chat_id)
         with get_db() as conn:
             with conn.cursor() as cur:
                 try:
-                    cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s)", (str(uid), target_id))
+                    cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (str(uid), target_id))
                     conn.commit()
-                    await update.message.reply_text(f"✅ تم ربط القناة {target_id}!", reply_markup=ReplyKeyboardRemove())
-                    await start(update, context)
-                except: 
-                    await update.message.reply_text("⚠️ مربوطة مسبقاً.")
+                    await update.message.reply_text(f"✅ تم سحب ID القناة وحفظه بنجاح: <code>{target_id}</code>", parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
+                    context.user_data['state'] = None
+                    return await start(update, context)
+                except Exception as e:
+                    await update.message.reply_text(f"⚠️ خطأ في الربط: {str(e)}")
         context.user_data['state'] = None
 
 # --- Webhook ---
@@ -196,10 +200,21 @@ def tv_webhook(token, target_id):
     raw_data = request.get_data(as_text=True)
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM users u JOIN entities e ON u.user_id = e.user_id WHERE u.secret_token=%s AND e.entity_id=%s AND u.is_activated=TRUE", (token, target_id))
-            if not cur.fetchone(): return jsonify({"status": "unauthorized"}), 403
+            # الأدمن يعمل دائماً، العميل يحتاج تفعيل
+            cur.execute("""
+                SELECT u.user_id, u.is_activated FROM users u 
+                JOIN entities e ON u.user_id = e.user_id 
+                WHERE u.secret_token=%s AND e.entity_id=%s
+            """, (token, target_id))
+            user = cur.fetchone()
+            
+            if not user: return jsonify({"status": "unauthorized"}), 403
+            if int(user[0]) != ADMIN_ID and not user[1]: return jsonify({"status": "unactivated"}), 403
     
-    asyncio.run_coroutine_threadsafe(application.bot.send_message(chat_id=target_id, text=f"📊 <b>إشارة TradingView:</b>\n\n<code>{raw_data}</code>", parse_mode=ParseMode.HTML), main_loop)
+    asyncio.run_coroutine_threadsafe(
+        application.bot.send_message(chat_id=target_id, text=f"📊 <b>إشارة TradingView:</b>\n\n<code>{raw_data}</code>", parse_mode=ParseMode.HTML), 
+        main_loop
+    )
     return jsonify({"status": "success"}), 200
 
 def run_flask():
@@ -211,7 +226,10 @@ if __name__ == "__main__":
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
+    # فلتر شامل لاستقبال النصوص وأحداث مشاركة القنوات (CHAT_SHARED)
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
     threading.Thread(target=run_flask, daemon=True).start()
+    
+    print("🚀 Bot Operational - Admin Control Enabled")
     application.run_polling()
