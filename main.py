@@ -167,7 +167,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     state = context.user_data.get('state')
 
-    # 1. تفعيل الكود في قاعدة البيانات
     if state == 'WAIT_CODE' and update.message.text:
         text = update.message.text.strip()
         success, days = await activate_with_code(uid, text)
@@ -177,7 +176,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await start(update, context)
         return await update.message.reply_text("❌ الكود غير موجود أو مستخدم مسبقاً.")
 
-    # 2. سحب الـ ID المباشر وحفظه في جدول entities
     if state == 'wait_ch' and update.message.chat_shared:
         target_id = str(update.message.chat_shared.chat_id)
         with get_db() as conn:
@@ -192,14 +190,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     await update.message.reply_text(f"⚠️ خطأ في قاعدة البيانات: {str(e)}")
         context.user_data['state'] = None
 
-# --- Webhook المصلح ---
+# --- Webhook المصلح (إرسال الإشارة خام) ---
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def tv_webhook(token, target_id):
+    # استقبال النص الخام القادم من TradingView كما هو
     raw_data = request.get_data(as_text=True)
+    
     with get_db() as conn:
         with conn.cursor() as cur:
-            # التحقق من وجود التوكن والـ ID المشترك في قاعدة البيانات
+            # التحقق من قاعدة البيانات (التوكن والآيدي)
             cur.execute("""
                 SELECT u.user_id, u.is_activated FROM users u 
                 JOIN entities e ON u.user_id = e.user_id 
@@ -207,16 +207,16 @@ def tv_webhook(token, target_id):
             """, (token, target_id))
             user = cur.fetchone()
             
-            if not user: return jsonify({"status": "unauthorized", "msg": "Token or Channel ID not found in DB"}), 403
+            if not user: return jsonify({"status": "unauthorized"}), 403
+            # استثناء للأدمن أو التحقق من التفعيل
             if int(user[0]) != ADMIN_ID and not user[1]: return jsonify({"status": "unactivated"}), 403
     
-    # استخدام requests للإرسال لضمان الاستقرار
     try:
+        # إرسال الرسالة خام تماماً بدون أي تنسيق أو إضافات
         tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         payload = {
             "chat_id": target_id,
-            "text": f"📊 <b>إشارة TradingView:</b>\n\n<code>{raw_data}</code>",
-            "parse_mode": "HTML"
+            "text": raw_data  # النص القادم من TradingView مباشرة
         }
         r = requests.post(tg_url, json=payload)
         if r.status_code == 200:
@@ -234,10 +234,9 @@ if __name__ == "__main__":
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
-    # فلتر شامل لاستقبال كافة أحداث المشاركة والنصوص
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
     threading.Thread(target=run_flask, daemon=True).start()
     
-    print("🚀 البوت يعمل الآن - تأكد من ربط القناة لتحديث قاعدة البيانات")
+    print("🚀 البوت يعمل الآن - نظام الإرسال الخام مفعل")
     application.run_polling()
