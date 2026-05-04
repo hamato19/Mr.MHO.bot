@@ -164,7 +164,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (str(uid), target_del))
                     conn.commit()
             await query.answer(f"✅ تم حذف {target_del}")
-            # إعادة عرض القائمة المحدثة فوراً
             with get_db() as conn:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
                     cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
@@ -201,10 +200,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def trading_webhook(token, target_id):
     try:
-        # 1. سحب البيانات الخام كـ Text بدلاً من JSON لتجنب مشاكل التنسيق
         raw_data = request.get_data(as_text=True)
-        
-        # 2. التحقق من الصلاحية (نحتاج الـ JSON هنا فقط للتحقق من قاعدة البيانات)
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -215,9 +211,7 @@ def trading_webhook(token, target_id):
                 if not cur.fetchone():
                     return jsonify({"status": "unauthorized"}), 403
 
-        # 3. إرسال التنبيه كما هو تماماً
-        # سيتم إرساله داخل وسم <code> ليكون سهل النسخ وبنفس شكل التنسيق الأصلي
-        msg = f"📩 <b>تنبيه مباشر من TradingView:</b>\n\n<code>{raw_data}</code>"
+        msg = f"<code>{raw_data}</code>"
 
         if main_loop and application:
             asyncio.run_coroutine_threadsafe(
@@ -229,33 +223,10 @@ def trading_webhook(token, target_id):
                 main_loop
             )
             return jsonify({"status": "success"}), 200
-        
         return jsonify({"status": "error"}), 500
-
     except Exception as e:
         logging.error(f"Webhook Error: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route('/activation_page')
-def activation_page():
-    return render_template_string("""
-    <!DOCTYPE html>
-    <html dir="rtl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        body { font-family: sans-serif; background: #1c1c1c; color: white; text-align: center; padding: 20px; }
-        input { width: 90%; padding: 15px; margin: 20px 0; border-radius: 10px; border: 1px solid #444; background: #2b2b2b; color: white; font-size: 16px; }
-        button { background: #248bfe; color: white; border: none; padding: 15px; border-radius: 10px; width: 95%; font-weight: bold; cursor: pointer; }
-    </style></head>
-    <body><h3>🎟️ تفعيل الاشتراك</h3><input type="text" id="code" placeholder="أدخل الكود هنا..."><button id="sendBtn">تفعيل الآن</button>
-    <script>
-        let tg = window.Telegram.WebApp; tg.expand();
-        document.getElementById('sendBtn').onclick = function() {
-            let val = document.getElementById('code').value;
-            if(val.trim() !== "") { tg.sendData(val); tg.close(); }
-        };
-    </script></body></html>
-    """)
 
 @app.route('/')
 def index(): return "Bot is Running", 200
@@ -280,8 +251,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message and update.message.web_app_data:
         code = update.message.web_app_data.data
         if ADMIN_ID != 0:
-            await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 <b>طلب تفعيل!</b>\n👤 مستخدم: <code>{uid}</code>\n🎟️ كود: <code>{code}</code>", parse_mode=ParseMode.HTML)
-        await update.message.reply_text("✅ تم إرسال كود التفعيل بنجاح، سيتم الرد عليك قريباً.", reply_markup=ReplyKeyboardRemove())
+            await context.bot.send_message(chat_id=ADMIN_ID, text=f"🚨 <b>طلب تفعيل!</b>\n👤 مستخدم: {uid}\n🎟️ كود: {code}")
+        await update.message.reply_text("✅ تم إرسال كود التفعيل بنجاح.", reply_markup=ReplyKeyboardRemove())
         await update.message.reply_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
         return
 
@@ -292,10 +263,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 try:
                     cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s)", (str(uid), target_id))
                     conn.commit()
-                    await update.message.reply_text(f"✅ تم ربط القناة: <code>{target_id}</code>", parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
+                    await update.message.reply_text(f"✅ تم ربط القناة: {target_id}", reply_markup=ReplyKeyboardRemove())
                     await update.message.reply_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
                 except: 
-                    await update.message.reply_text("❌ القناة مرتبطة مسبقاً بهذا الحساب.", reply_markup=ReplyKeyboardRemove())
+                    await update.message.reply_text("❌ القناة مرتبطة مسبقاً.", reply_markup=ReplyKeyboardRemove())
                     await update.message.reply_text(STRINGS['العربية']['welcome'], reply_markup=await get_main_menu(), parse_mode=ParseMode.HTML)
         context.user_data['state'] = None
 
