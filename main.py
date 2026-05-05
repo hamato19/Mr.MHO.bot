@@ -127,7 +127,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status = "فعال ✅" if is_active_now else "متوقف ❌"
         
         txt = (
-            f"👤 <b>بيانات حسابك (نظام محمد للتحليل):</b>\n\n"
+            f"👤 <b>بيانات حسابك (نظام الاشتراك ):</b>\n\n"
             f"- معرف المستخدم: <code>{uid}</code>\n"
             f"- حالة الحساب: <b>{status}</b>\n"
             f"- متبقي على الانتهاء: <b>{time_left}</b>\n"
@@ -236,7 +236,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         success, days = await activate_with_code(uid, text)
         if success:
             context.user_data['state'] = None
-            await update.message.reply_text(f"✅ مبروك يا محمد! تم تفعيل اشتراكك لمدة {days} يوماً بنجاح وبدأ العداد التنازلي.")
+            await update.message.reply_text(f"✅  تم تفعيل اشتراكك لمدة {days} يوماً بنجاح وبدأ العداد التنازلي.")
             # العودة للقائمة الرئيسية لتحديث البيانات وعرض العداد
             return await start(update, context)
         return await update.message.reply_text("❌ الكود خاطئ أو منتهي الصلاحية.")
@@ -305,5 +305,5 @@ if __name__ == "__main__":
     
     threading.Thread(target=run_flask, daemon=True).start()
     
-    print("🚀 نظام محمد للتحليل مفعل: إلغاء الفترة التجريبية التلقائية + يتطلب كود تفعيل فوراً + عداد تنازلي")
+    print("🚀 نظام التحليل مفعل: إلغاء الفترة التجريبية التلقائية + يتطلب كود تفعيل فوراً + عداد تنازلي")
     application.run_polling()
