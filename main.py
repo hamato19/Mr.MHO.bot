@@ -54,7 +54,18 @@ async def get_main_menu(uid):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_user: return
+    
+    # 1. استدعاء الشروط فوراً (أضف هذا السطر هنا)
+    await terms.send_terms(update, context)
+    
+    # 2. أضف return هنا ليتوقف البوت ولا يكمل بقية الفحص إلا بعد الموافقة
+    return 
+
+    # بقية الكود القديم سيبقى كما هو بالأسفل لكنه لن ينفذ إلا عند استدعائه مجدداً
     uid = update.effective_user.id
+    with get_db() as conn:
+        # ... تكملة الكود ...
+
     
     with get_db() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
