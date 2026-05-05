@@ -33,20 +33,26 @@ async def send_terms(update, context):
     )
 
 async def handle_terms_callback(update, context):
-    """معالجة استجابة المستخدم على الشروط"""
+    """معالجة استجابة المستخدم على الشروط والربط مع نظام التفعيل"""
     query = update.callback_query
     await query.answer()
     
     if query.data == "accept_terms":
+        # 1. تحديث الرسالة لتأكيد الموافقة
         await query.edit_message_text(
-            "✅ **تم تسجيل موافقتك بنجاح.**\n\n"
-            "⚠️ الوصول مقيد. يرجى إرسال **كود التفعيل** الخاص بك للبدء:",
+            "✅ **تم تسجيل موافقتك بنجاح.**\nجاري التحقق من حالة اشتراكك...",
             parse_mode='HTML'
         )
         
+        # 2. استدعاء دالة التحقق من الاشتراك من الملف الرئيسي
+        # نستخدم الاستيراد المحلي داخل الدالة لتجنب مشكلة Circular Import
+        from main import check_activation_logic
+        await check_activation_logic(update, context)
+        
     elif query.data == "decline_terms":
+        # في حال الرفض، نغلق الوصول تماماً
         await query.edit_message_text(
             "🚫 **نعتذر، لا يمكن استخدام البوت دون الموافقة على الشروط.**\n\n"
-            "إذا غيرت رأيك، يمكنك إرسال /start مرة أخرى.",
+            "إذا غيرت رأيك، يمكنك إرسال /start مرة أخرى وتذكر أن الاستخدام لغرض تعليمي فقط.",
             parse_mode='HTML'
         )
