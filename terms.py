@@ -38,17 +38,15 @@ async def handle_terms_callback(update, context):
     await query.answer()
     
     if query.data == "accept_terms":
-        # في حال الموافقة:
         await query.edit_message_text(
-            "✅ **تم تسجيل موافقتك بنجاح.**\n\nمرحباً بك في DigiHub، يمكنك الآن استخدام القائمة الرئيسية.",
+            "✅ **تم تسجيل موافقتك بنجاح.**\n\n"
+            "⚠️ الوصول مقيد. يرجى إرسال **كود التفعيل** الخاص بك للبدء:",
             parse_mode='HTML'
         )
-        # هنا تستدعي دالة القائمة الرئيسية:
-        # await show_main_menu(update, context)
         
     elif query.data == "decline_terms":
-        # في حال عدم الموافقة (طلبك):
         await query.edit_message_text(
-            "🚫 **نعتذر، لا يمكن استخدام البوت دون الموافقة على الشروط.**\n\nإذا غيرت رأيك، يمكنك إعادة إرسال كود التفعيل للبدء من جديد.",
+            "🚫 **نعتذر، لا يمكن استخدام البوت دون الموافقة على الشروط.**\n\n"
+            "إذا غيرت رأيك، يمكنك إرسال /start مرة أخرى.",
             parse_mode='HTML'
         )
