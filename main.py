@@ -21,6 +21,15 @@ application = None
 
 # --- دوال مساعدة ---
 
+def keep_alive():
+    """دالة لمنع السيرفر من النوم (لخدمات Render المجانية)"""
+    while True:
+        try:
+            requests.get(DOMAIN, timeout=10)
+        except:
+            pass
+        time.sleep(20)
+
 def get_time_remaining(expiry_date):
     if not expiry_date: return "غير مفعل 🔓"
     now = datetime.datetime.now()
@@ -75,7 +84,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     await query.answer()
 
-    # --- إدارة الأزرار العامة ---
     if data == 'home':
         await query.edit_message_text("🏠 <b>القائمة الرئيسية:</b>", reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
 
@@ -123,7 +131,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for e in ents: txt += f"\n🔗 <code>{DOMAIN}/webhook/{token}/{e['entity_id']}</code>\n"
         await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة", callback_data='home')]]))
 
-    # --- نظام إدارة المستخدمين (الأدمن) ---
     elif data == 'admin_panel' and uid == ADMIN_ID:
         kb = [[InlineKeyboardButton("🎫 توليد كود تفعيل", callback_data='admin_durations')],
               [InlineKeyboardButton("👥 إدارة المستخدمين", callback_data='admin_users')],
@@ -185,7 +192,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 conn.commit()
         await query.edit_message_text(f"✅ كود جديد: <code>{code}</code>", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة", callback_data='admin_panel')]]))
 
-# --- نظام الويب هوك (فوري وخام) ---
+# --- نظام الويب هوك ---
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def tv_webhook(token, target_id):
@@ -200,12 +207,11 @@ def tv_webhook(token, target_id):
             if int(user['user_id']) != ADMIN_ID and (not user['is_activated'] or (user['expiry_date'] and datetime.datetime.now() > user['expiry_date'])):
                 return jsonify({"error": "Expired"}), 403
     
-    # إرسال فوري دون تأخير
     requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", 
                   json={"chat_id": target_id, "text": raw_data, "parse_mode": "HTML"})
     return jsonify({"status": "success"}), 200
 
-# --- تشغيل ---
+# --- رسائل التفعيل ---
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -233,8 +239,11 @@ if __name__ == "__main__":
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
+    # تشغيل Flask في ثريد منفصل
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000))), daemon=True).start()
+    
+    # تشغيل دالة البقاء حياً
     threading.Thread(target=keep_alive, daemon=True).start()
     
-    print("🚀 يعمل...")
+    print("🚀 النظام يعمل...")
     application.run_polling()
