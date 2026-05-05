@@ -86,9 +86,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb = [[InlineKeyboardButton("💳 اشترك الآن (تواصل مع المطور)", url=f"tg://user?id={ADMIN_ID}")]]
         
         # رسالة قفل البوت (تعديل النص ليوضح طلب الكود فورا)
-        msg = "👋 أهلاً بك في نظام Mr.MOH\n\n🔒 النظام مغلق حالياً. يرجى إدخال كود التفعيل المكون من 10 أرقام (أو الكود التجريبي) للاستمرار واستخدام خدمات البوت:"
+        msg = "👋 أهلاً بك في نظام Mr.MOH\n\n🔒 النظام مغلق حالياً. يرجى إدخال كود التفعيل للاستمرار واستخدام خدمات البوت:"
         if is_expired:
-            msg = "👋 مرحباً بك مجدداً..\n\n❌ <b>انتهت فترة اشتراكك/التجربة (العداد = 0).</b>\nيرجى إرسال كود تفعيل جديد للتجديد والاستمرار:"
+            msg = "👋 مرحباً بك مجدداً..\n\n❌ <b>انتهت فترة اشتراكك (العداد = 0).</b>\nيرجى إرسال كود تفعيل جديد للتجديد والاستمرار:"
             
         return await update.message.reply_text(
             msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML
@@ -182,7 +182,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with conn.cursor() as cur:
                 cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
                 conn.commit()
-        await query.edit_message_text(f"✅ تم تحديث التوكن السري الخاص بك:\n<code>{new_token}</code>", parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(uid))
+        await query.edit_message_text(f"✅ تم تحديث رمز الامان الخاص بك:\n<code>{new_token}</code>", parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(uid))
 
     # --- لوحة التحكم ---
     elif data == 'admin_panel' and uid == ADMIN_ID:
