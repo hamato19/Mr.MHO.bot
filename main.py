@@ -15,18 +15,18 @@ ADMIN_ID = int(os.getenv('ADMIN_ID', 0))
 DOMAIN = os.getenv('DOMAIN', "https://mr-mho-bot-hewc.onrender.com")
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 application = None
 
 # --- دوال مساعدة لحساب الوقت ---
 def get_time_remaining(expiry_date):
     """تحسب الوقت المتبقي وتنسقه بشكل مقروء."""
     if not expiry_date:
-        return "غير محدد"
+        return "غير محدد (يتطلب تفعيل)"
     
     now = datetime.datetime.now()
     if now > expiry_date:
-        return "منتهٍ 🛑"
+        return "منتهٍ 🛑 (يتطلب تجديد)"
     
     diff = expiry_date - now
     days = diff.days
@@ -55,13 +55,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_user: return
     uid = update.effective_user.id
     
-    # 1. جلب بيانات المستخدم أو تسجيله (افتراضياً غير مفعل وبدون تاريخ)
+    # 1. جلب بيانات المستخدم أو تسجيله (افتراضياً غير مفعل وبدون تاريخ انتهاء)
     with get_db() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
             user = cur.fetchone()
             
             if not user:
+                # تسجيل المستخدم الجديد بحالة "غير مفعل" تماماً (لا توجد فترة تجريبية تلقائية)
                 cur.execute(
                     "INSERT INTO users (user_id, secret_token, is_activated, expiry_date) VALUES (%s, %s, %s, %s)",
                     (str(uid), secrets.token_hex(8), False, None)
@@ -71,29 +72,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
                 user = cur.fetchone()
 
-    # 2. منطق التأمين والتحقق من العداد (اغلاق البوت)
+    # 2. منطق التأمين وإغلاق البوت (يتطلب كود تفعيل)
     is_admin = (uid == ADMIN_ID)
     is_expired = False
     
-    # فحص تاريخ الانتهاء (Counter check)
+    # فحص تاريخ الانتهاء (إذا كان موجوداً)
     if user['expiry_date']:
         is_expired = datetime.datetime.now() > user['expiry_date']
 
-    # إذا كان المستخدم ليس الأدمن (وإما غير مفعل أو عداده وصل للصفر)
+    # إذا كان المستخدم ليس الأدمن (وإما غير مفعل تماماً أو اشتراكه/تجربته منتهية)
     if not is_admin and (not user['is_activated'] or is_expired):
         context.user_data['state'] = 'WAIT_CODE'
         kb = [[InlineKeyboardButton("💳 اشترك الآن (تواصل مع المطور)", url=f"tg://user?id={ADMIN_ID}")]]
         
-        # رسالة قفل البوت
-        msg = "👋 أهلاً بك في نظام Mr.MOH\n\n🔒 النظام مغلق حالياً. يرجى إدخال كود التفعيل المكون من 10 أرقام للاستمرار:"
+        # رسالة قفل البوت (تعديل النص ليوضح طلب الكود فورا)
+        msg = "👋 أهلاً بك في نظام Mr.MOH\n\n🔒 النظام مغلق حالياً. يرجى إدخال كود التفعيل المكون من 10 أرقام (أو الكود التجريبي) للاستمرار واستخدام خدمات البوت:"
         if is_expired:
-            msg = "👋 مرحباً بك مجدداً..\n\n❌ <b>انتهت فترة اشتراكك/التجربة (وصل العداد لـ 0).</b>\nيرجى إرسال كود تفعيل جديد للتجديد:"
+            msg = "👋 مرحباً بك مجدداً..\n\n❌ <b>انتهت فترة اشتراكك/التجربة (العداد = 0).</b>\nيرجى إرسال كود تفعيل جديد للتجديد والاستمرار:"
             
         return await update.message.reply_text(
             msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML
         )
 
-    # 3. عرض القائمة الرئيسية إذا كان الاشتراك سارياً (العداد > 0)
+    # 3. عرض القائمة الرئيسية إذا كان الاشتراك سارياً (تم تفعيله بكود)
     await update.message.reply_text(
         "🏠 <b>القائمة الرئيسية للنظام:</b>", 
         reply_markup=await get_main_menu(uid), 
@@ -110,7 +111,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("🏠 <b>القائمة الرئيسية:</b>", reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
 
     elif data == 'acc':
-        # تفعيل العداد التنازلي في "حسابي"
+        # تفعيل العداد التنازلي في "حسابي" بناءً على تاريخ الاشتراك المفعل
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT secret_token, expiry_date, is_activated FROM users WHERE user_id = %s", (str(uid),))
@@ -120,7 +121,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # حساب الوقت المتبقي بدقة (العداد التنازلي)
         time_left = get_time_remaining(user['expiry_date'])
-        status = "فعال ✅" if user['is_activated'] and time_left != "غير محدد" and "منتهٍ" not in time_left else "متوقف ❌"
+        
+        # تحديد حالة الحساب بناءً على التفعيل ومرور الوقت
+        is_active_now = user['is_activated'] and time_left != "غير محدد (يتطلب تفعيل)" and "منتهٍ" not in time_left
+        status = "فعال ✅" if is_active_now else "متوقف ❌"
         
         txt = (
             f"👤 <b>بيانات حسابك (نظام محمد للتحليل):</b>\n\n"
@@ -135,7 +139,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'add_ch':
         context.user_data['state'] = 'wait_ch'
         kb = [[KeyboardButton("📂 اختر القناة", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))]]
-        await context.bot.send_message(chat_id=uid, text="📢 اختر القناة ليقوم البوت بسحب الـ ID وحفظه فوراً:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True))
+        await context.bot.send_message(chat_id=uid, text="📢 اختر القناة ليقوم البوت بسحب الـ ID وحفظه فوراً في قاعدة البيانات:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True))
 
     elif data == 'view_chs':
         with get_db() as conn:
@@ -143,11 +147,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
                 ents = cur.fetchall()
         if not ents:
-            await query.edit_message_text("❌ لا توجد قنوات مرتبطة.", reply_markup=await get_main_menu(uid))
+            await query.edit_message_text("❌ لا توجد قنوات مرتبطة في قاعدة البيانات.", reply_markup=await get_main_menu(uid))
         else:
             kb = [[InlineKeyboardButton(f"🗑️ حذف {e['entity_id']}", callback_data=f"del_{e['entity_id']}")] for e in ents]
             kb.append([InlineKeyboardButton("🏠 عودة", callback_data='home')])
-            await query.edit_message_text("📺 <b>قنواتك المسجلة:</b>", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+            await query.edit_message_text("📺 <b>قنواتك المسجلة في النظام:</b>", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
     elif data.startswith('del_'):
         ch_id = data.replace('del_', '')
@@ -165,9 +169,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
                 ents = cur.fetchall()
         if not ents:
-            await query.edit_message_text("⚠️ أضف قناة أولاً لتوليد الروابط.", reply_markup=await get_main_menu(uid))
+            await query.edit_message_text("⚠️ أضف قناة أولاً لتوليد روابط الويب هوك.", reply_markup=await get_main_menu(uid))
         else:
-            txt = "🌐 <b>روابط الويب هوك الخاصة بك:</b>\n"
+            txt = "🌐 <b>روابط الويب هوك الخاصة بك (خام):</b>\n"
             for e in ents:
                 txt += f"\n📍 القناة: <code>{e['entity_id']}</code>\n🔗 <code>{DOMAIN}/webhook/{token}/{e['entity_id']}</code>\n"
             await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة", callback_data='home')]]))
@@ -178,14 +182,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with conn.cursor() as cur:
                 cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
                 conn.commit()
-        await query.edit_message_text(f"✅ تم تحديث التوكن السري:\n<code>{new_token}</code>", parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(uid))
+        await query.edit_message_text(f"✅ تم تحديث التوكن السري الخاص بك:\n<code>{new_token}</code>", parse_mode=ParseMode.HTML, reply_markup=await get_main_menu(uid))
 
-    # --- لوحة التحكم (تم تحسينها وإضافة خيارات 60 و 90 يوم) ---
+    # --- لوحة التحكم ---
     elif data == 'admin_panel' and uid == ADMIN_ID:
         kb = [
-            [InlineKeyboardButton("🎫 توليد كود اشتراك", callback_data='admin_durations')],
-            [InlineKeyboardButton("👥 المستخدمين (الأحدث)", callback_data='admin_users')],
-            [InlineKeyboardButton("🏠 عودة", callback_data='home')]
+            [InlineKeyboardButton("🎫 توليد كود تفعيل", callback_data='admin_durations')],
+            [InlineKeyboardButton("👥 المستخدمين (قاعدة البيانات)", callback_data='admin_users')],
+            [InlineKeyboardButton("🏠 العودة للقائمة", callback_data='home')]
         ]
         await query.edit_message_text("👮 <b>لوحة تحكم المالك:</b>", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
@@ -204,61 +208,60 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 # جلب آخر 15 مستخدم حسب تاريخ الانتهاء
                 cur.execute("SELECT user_id, expiry_date, is_activated FROM users ORDER BY expiry_date DESC NULLS LAST LIMIT 15")
                 users = cur.fetchall()
-        txt = "👥 <b>قائمة آخر 15 مستخدم (قاعدة البيانات):</b>\n\n"
+        txt = "👥 <b>قائمة آخر 15 مستخدم (تأكد من تاريخ الانتهاء والعداد):</b>\n\n"
         for u in users:
             status = "✅" if u['is_activated'] else "❌"
-            exp = u['expiry_date'].strftime('%Y-%m-%d') if u['expiry_date'] else "غير محدد"
+            exp = u['expiry_date'].strftime('%Y-%m-%d') if u['expiry_date'] else "غير مفعل"
             txt += f"{status} <code>{u['user_id']}</code> | ينتهي: <code>{exp}</code>\n"
         await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة", callback_data='admin_panel')]]))
 
     elif data.startswith('gen_') and uid == ADMIN_ID:
         days = int(data.replace('gen_', ''))
-        # إنشاء كود فريد يبدأ بـ MOH
+        # إنشاء كود فريد يبدأ بـ MOH للتفعيل التجريبي أو المدفوع
         code = f"MOH-{secrets.token_hex(3).upper()}"
         with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute("INSERT INTO activation_codes (code, duration_days) VALUES (%s, %s)", (code, days))
                 conn.commit()
-        await query.edit_message_text(f"✅ تم إنشاء كود جديد بنجاح:\n<code>{code}</code>\n⏳ الصلاحية: {days} يوماً", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة", callback_data='admin_panel')]]))
+        await query.edit_message_text(f"✅ تم إنشاء كود تفعيل جديد بنجاح:\n<code>{code}</code>\n⏳ الصلاحية: {days} يوماً", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة", callback_data='admin_panel')]]))
 
-# --- معالجة الرسائل وسحب الـ ID ---
+# --- معالجة الرسائل وسحب الـ ID (يجب تحديث قاعدة البيانات) ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     state = context.user_data.get('state')
 
-    # 1. تفعيل الكود وربطه بقاعدة البيانات (نظام محمد)
+    # 1. تفعيل الكود وربطه بقاعدة البيانات لبدء العداد (نظام محمد)
     if state == 'WAIT_CODE' and update.message.text:
         text = update.message.text.strip()
         success, days = await activate_with_code(uid, text)
         if success:
             context.user_data['state'] = None
-            await update.message.reply_text(f"✅ مبروك يا محمد! تم تفعيل اشتراكك لمدة {days} يوماً بنجاح.")
-            # العودة للقائمة الرئيسية لتحديث العداد
+            await update.message.reply_text(f"✅ مبروك يا محمد! تم تفعيل اشتراكك لمدة {days} يوماً بنجاح وبدأ العداد التنازلي.")
+            # العودة للقائمة الرئيسية لتحديث البيانات وعرض العداد
             return await start(update, context)
         return await update.message.reply_text("❌ الكود خاطئ أو منتهي الصلاحية.")
 
-    # 2. سحب الـ ID المباشر وحفظه في جدول entities
+    # 2. سحب الـ ID المباشر للقناة وحفظه في جدول entities
     if state == 'wait_ch' and update.message.chat_shared:
         target_id = str(update.message.chat_shared.chat_id)
         with get_db() as conn:
             with conn.cursor() as cur:
-                # ON CONFLICT لضمان عدم تكرار القناة لنفس المستخدم
                 cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (str(uid), target_id))
                 conn.commit()
-                await update.message.reply_text(f"✅ تم ربط القناة <code>{target_id}</code> بنجاح يا محمد!", parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
+                await update.message.reply_text(f"✅ تم ربط القناة وحفظ الـ ID <code>{target_id}</code> بنجاح!", parse_mode=ParseMode.HTML, reply_markup=ReplyKeyboardRemove())
                 context.user_data['state'] = None
                 return await start(update, context)
 
-# --- نظام الويب هوك المؤمن (الإرسال الخام) ---
+# --- نظام الويب هوك المؤمن (الإرسال الخام بناءً على العداد > 0) ---
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def tv_webhook(token, target_id):
-    # استقبال النص الخام تماماً من TradingView
+    # استقبال النص الخام تماماً من TradingView لضمان Txt نظيف
     raw_data = request.get_data(as_text=True)
     
     with get_db() as conn:
         with conn.cursor() as cur:
-            # التحقق المشترك: هل التوكن والآيدي صحيحان؟ هل المستخدم مفعل؟
+            # التحقق المشترك: هل التوكن والآيدي صحيحان؟ وهل المستخدم مفعل (العداد > 0)؟
             cur.execute("""
                 SELECT u.user_id, u.is_activated, u.expiry_date FROM users u 
                 JOIN entities e ON u.user_id = e.user_id 
@@ -268,19 +271,19 @@ def tv_webhook(token, target_id):
             
             if not user: return jsonify({"status": "unauthorized", "details": "Token/Chat ID not found in DB"}), 403
             
-            # فحص العداد في الويب هوك (تأمين إضافي عالي)
+            # فحص العداد في الويب هوك (تأمين عالي جداً لضمان عدم إرسال الإشارات للقنوات المنتهية)
             is_expired = user[2] and datetime.datetime.now() > user[2]
             if int(user[0]) != ADMIN_ID and (not user[1] or is_expired):
-                # إذا منتهي (العداد=0)، لا نرسل الإشارة
+                # إذا منتهي (العداد=0)، لا يتم الإرسال
                 return jsonify({"status": "subscription_expired", "details": "Counter reached 0"}), 403
     
-    # الإرسال الخام لملجرام لضمانTxt نظيف
+    # الإرسال الخام لملجرام
     try:
         tg_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         payload = {
             "chat_id": target_id,
-            "text": raw_data, # النص الخام القادم من TradingView
-            "parse_mode": "HTML" # للحفاظ على أي تنسيق بسيط في الـ JSON
+            "text": raw_data, # النص الخام القادم من TradingView (بدون أي كلمة إضافية)
+            "parse_mode": "HTML" # للحفاظ على أي تنسيق بسيط في الـ JSON إذا وجد
         }
         r = requests.post(tg_url, json=payload)
         if r.status_code == 200:
@@ -294,17 +297,13 @@ def run_flask():
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
 
 if __name__ == "__main__":
-    # تهيئة البوت
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     
-    # إضافة المعالجات (Handlers)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_handler))
-    # فلتر شامل لاستقبال كافة أحداث المشاركة والنصوص
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
-    # تشغيل Flask في Thread منفصل لضمان الاستقرار
     threading.Thread(target=run_flask, daemon=True).start()
     
-    print("🚀 نظام محمد للتحليل مفعل بالكامل (عداد تنازلي + تأمين عالي + إرسال خام)")
+    print("🚀 نظام محمد للتحليل مفعل: إلغاء الفترة التجريبية التلقائية + يتطلب كود تفعيل فوراً + عداد تنازلي")
     application.run_polling()
