@@ -8,6 +8,7 @@ from psycopg2.extras import RealDictCursor
 # استيراد الدوال من الملفات المساعدة
 from database import get_db
 from auth import activate_with_code
+import terms
 
 # الإعدادات الأساسية
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -248,11 +249,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await start(update, context)
 
 if __name__ == "__main__":
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    application = ApplicationBuilder().token(BOT_TOKEN).build() 
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(terms.handle_terms_callback, pattern='^(accept_terms|decline_terms)$'))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
-    
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000))), daemon=True).start()
     threading.Thread(target=keep_alive, daemon=True).start()
     
