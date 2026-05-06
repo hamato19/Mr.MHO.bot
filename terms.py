@@ -40,31 +40,23 @@ async def send_terms(update, context, user_lang='ar'):
         )
 
 async def handle_terms_callback(update, context):
-    """معالجة الضغط على أزرار الشروط"""
+    """
+    معالجة الضغط على أزرار الشروط.
+    ملاحظة: المنطق الفعلي للانتقال يفضل أن يكون في handle_callback داخل main.py
+    لتجنب مشكلة الـ Circular Import.
+    """
     query = update.callback_query
-    await query.answer()
-    
     user_lang = context.user_data.get('selected_lang', 'ar')
     
     if query.data == "accept_terms":
-        # 1. إظهار نص النجاح
         success_text = i18n.get_text('accept_msg', lang=user_lang)
+        # رسالة انتظار احترافية
+        wait_text = f"✅ {success_text}\n\n⏳ <b>جاري التحقق من حالة اشتراكك...</b>" if user_lang == 'ar' else f"✅ {success_text}\n\n⏳ <b>Verifying your subscription...</b>"
+        await query.edit_message_text(wait_text, parse_mode=ParseMode.HTML)
         
-        # تحسين: نحدث الرسالة ونعلم المستخدم أننا نتحقق من اشتراكه
-        wait_msg = f"{success_text}\n\n⏳ <b>جاري التحقق من الاشتراك...</b>" if user_lang == 'ar' else f"{success_text}\n\n⏳ <b>Verifying subscription...</b>"
-        await query.edit_message_text(wait_msg, parse_mode=ParseMode.HTML)
+        # ملاحظة لأبو إلياس: الاستدعاء سيتم آلياً من خلال main.py 
+        # لأننا ربطنا accept_terms بدالة check_activation_logic هناك.
         
-        # 2. الاستدعاء الآمن لملف main
-        try:
-            from main import check_activation_logic
-            # الاستدعاء الآن متوافق مع التعديل اللي سويناه في main.py
-            await check_activation_logic(update, context, user_lang=user_lang)
-        except Exception as e:
-            print(f"CRITICAL ERROR in terms.py: {e}")
-            # في حال حدث خطأ تقني، نحاول نفتح القائمة للأمان
-            from main import start
-            await start(update, context)
-
     elif query.data == "decline_terms":
         decline_text = i18n.get_text('decline_msg', lang=user_lang)
         await query.edit_message_text(decline_text, parse_mode=ParseMode.HTML)
