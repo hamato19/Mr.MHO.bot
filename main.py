@@ -1,4 +1,11 @@
-import os, secrets, asyncio, threading, logging, datetime, requests, time
+import os
+import secrets
+import asyncio
+import threading
+import logging
+import datetime
+import requests
+import time
 from flask import Flask, request, jsonify
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton, KeyboardButtonRequestChat
 from telegram.constants import ParseMode
@@ -13,7 +20,7 @@ import terms
 import i18n
 import errors
 import subscription
-import owner  # ملف استثناء المالك
+import owner  # ملف استثناء المالك وتوليد الأكواد
 
 # الإعدادات الأساسية
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -29,8 +36,10 @@ application = None
 
 def keep_alive():
     while True:
-        try: requests.get(DOMAIN, timeout=10)
-        except: pass
+        try: 
+            requests.get(DOMAIN, timeout=10)
+        except: 
+            pass
         time.sleep(20)
 
 def get_time_remaining(expiry_date):
@@ -69,7 +78,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             cur.execute("INSERT INTO users (user_id, secret_token) VALUES (%s, %s) ON CONFLICT DO NOTHING", (str(uid), secrets.token_hex(8)))
             conn.commit()
 
-    # استثناء المالك فوراً
     if await owner.is_owner(uid):
         return await check_activation_logic(update, context)
 
@@ -125,7 +133,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT secret_token FROM users WHERE user_id = %s", (str(uid),))
-                token = cur.fetchone()['secret_token']
+                user_data = cur.fetchone()
+                token = user_data['secret_token']
                 cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
                 ents = cur.fetchall()
         if not ents: return await query.edit_message_text("⚠️ اربط قناة أولاً.", reply_markup=await get_main_menu(uid))
@@ -145,16 +154,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await admin.show_admin_panel(update, context)
 
     elif data.startswith(('admin_', 'gen_days_', 'manage_', 'adm_')):
-        elif data.startswith(('admin_', 'gen_days_', 'manage_', 'adm_')):
         if int(uid) == ADMIN_ID:
-            if data == 'admin_users': 
-                await admin.list_users(update)
-            elif data == 'admin_stats': 
-                await admin.show_admin_stats(update)
+            if data == 'admin_users': await admin.list_users(update)
+            elif data == 'admin_stats': await admin.show_admin_stats(update)
             elif data.startswith('gen_days_'): 
-                # التعديل هنا: استدعاء الدالة من ملف owner
                 await owner.process_generate_code(update, int(data.split('_')[2]))
-)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
@@ -182,14 +186,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    context.bot_data['admin_id'] = ADMIN_ID 
-
-    # استثناء المالك
     if await owner.is_owner(uid):
         await owner.bypass_subscription(uid)
         msg_owner = "🌟 <b>مرحباً بك يا مِستر MOH</b>\nتم تفعيل صلاحيات المالك."
-        if update.callback_query: return await update.callback_query.edit_message_text(msg_owner, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
-        else: return await update.effective_chat.send_message(msg_owner, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
+        if update.callback_query: await update.callback_query.edit_message_text(msg_owner, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
+        else: await update.effective_chat.send_message(msg_owner, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
+        return
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -210,12 +212,9 @@ def index(): return "🚀 Sumou System Online", 200
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def tv_webhook(token, target_id):
-    # استقبال البيانات كما هي من TradingView
     raw_data = request.get_data(as_text=True)
-    
     with get_db() as conn:
         with conn.cursor() as cur:
-            # التحقق من صحة التوكن وربطه بالقناة وتفعيل المستخدم
             cur.execute("""
                 SELECT u.user_id FROM users u 
                 JOIN entities e ON u.user_id = e.user_id 
@@ -223,11 +222,10 @@ def tv_webhook(token, target_id):
             """, (token, target_id))
             if not cur.fetchone(): return jsonify({"error": "Unauthorized"}), 403
     
-    # إرسال الإشارة خام (نفس TradingView بالضبط) وبدون أي إضافات
     requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
         "chat_id": target_id, 
         "text": raw_data, 
-        "parse_mode": None # نضعه None لضمان عدم حدوث أخطاء في تنسيق الرموز الخاصة
+        "parse_mode": None 
     })
     return jsonify({"status": "sent"}), 200
 
