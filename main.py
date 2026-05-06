@@ -8,12 +8,12 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 from psycopg2.extras import RealDictCursor
 
 # استيراد الدوال من الملفات المساعدة
-from database
-import get_db
-from auth 
-import activate_with_code
-import terms  
+# بدلاً من الأسطر المكسورة، استخدم هذا التنسيق:
+from database import get_db
+from auth import activate_with_code
+import terms
 import i18n
+
 
 # الإعدادات الأساسية
 BOT_TOKEN = os.getenv('BOT_TOKEN')
