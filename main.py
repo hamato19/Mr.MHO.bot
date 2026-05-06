@@ -5,9 +5,10 @@ from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from psycopg2.extras import RealDictCursor
 
-# استيراد الدوال من الملفات المساعدة
+# استيراد الملفات المساعدة
 from database import get_db
 from auth import activate_with_code
+import admin  # ملف الإدارة الجديد
 import terms
 import i18n
 import errors
@@ -22,7 +23,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 application = None
 
-# --- دوال مساعدة ---
+# --- الدوال المساعدة ---
 
 def keep_alive():
     while True:
@@ -38,7 +39,7 @@ def get_time_remaining(expiry_date):
     return f"{diff.days} يوم و {diff.seconds // 3600} ساعة"
 
 async def get_main_menu(uid):
-    # استخدام bot.get_me بشكل آمن
+    """إنشاء القائمة الرئيسية مع إخفاء زر الأدمن عن المستخدم العادي"""
     try:
         bot_me = await application.bot.get_me()
         bot_username = bot_me.username
@@ -52,83 +53,38 @@ async def get_main_menu(uid):
         [InlineKeyboardButton("🤖 إضافة البوت كمشرف", url=f"https://t.me/{bot_username}?startchannel=true")],
         [InlineKeyboardButton("☎️ الدعم الفني", url=f"tg://user?id={ADMIN_ID}")]
     ]
+    
+    # التحقق من الهوية لإظهار زر الأدمن
     if int(uid) == ADMIN_ID:
         kb.append([InlineKeyboardButton("👮 لوحة التحكم (الأدمن)", callback_data='admin_panel')])
+        
     return InlineKeyboardMarkup(kb)
 
-# --- المعالجات المعدلة ---
+# --- المعالجات (Handlers) ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_user: return
     keyboard = [[InlineKeyboardButton("🇸🇦 العربية", callback_data='set_lang_ar'), InlineKeyboardButton("🇺🇸 English", callback_data='set_lang_en')]]
     welcome_msg = "👋 مرحباً بك في نظام سمو الأرقام\nالرجاء اختيار اللغة:\n\nWelcome! Please choose your language:"
-    # استخدام update.effective_chat لضمان العمل في كل الحالات
     await update.effective_chat.send_message(welcome_msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    data = query.data
+    uid = update.effective_user.id
     await query.answer()
-    if query.data.startswith('set_lang_'):
-        selected_lang = query.data.split('_')[2]
+
+    # اختيار اللغة
+    if data.startswith('set_lang_'):
+        selected_lang = data.split('_')[2]
         context.user_data['selected_lang'] = selected_lang
         await terms.send_terms(update, context, user_lang=selected_lang)
 
-async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE, user_lang=None):
-    if not update.effective_user: return
-    uid = update.effective_user.id
-    chat = update.effective_chat
-    lang = user_lang or context.user_data.get('selected_lang', 'ar')
-
-    if uid == ADMIN_ID:
-        msg = "👑 <b>أهلاً بك يا مطور النظام:</b>" if lang == 'ar' else "👑 <b>Welcome, Developer:</b>"
-        return await chat.send_message(msg, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
-
-    try:
-        with get_db() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
-                user = cur.fetchone()
-                
-                if not user:
-                    new_token = secrets.token_hex(8)
-                    cur.execute("INSERT INTO users (user_id, secret_token, is_activated, expiry_date, created_at) VALUES (%s, %s, %s, %s, NOW())", 
-                                (str(uid), new_token, False, None))
-                    conn.commit()
-                    cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
-                    user = cur.fetchone()
-
-        now = datetime.datetime.now()
-        # تصحيح فحص التاريخ (تجنب خطأ مقارنة None)
-        is_active = user.get('is_activated', False)
-        expiry = user.get('expiry_date')
-        
-        if is_active and expiry and now > expiry:
-            is_active = False
-
-        if not is_active:
-            context.user_data['state'] = 'WAIT_CODE'
-            msg = "⚠️ <b>الوصول مقيد.</b>\nالرجاء إرسال كود التفعيل:" if lang == 'ar' else "⚠️ <b>Access Restricted.</b>\nPlease send activation code:"
-            btn_txt = "💳 شراء كود" if lang == 'ar' else "💳 Buy Code"
-            kb = [[InlineKeyboardButton(btn_txt, url=f"tg://user?id={ADMIN_ID}")]]
-            return await chat.send_message(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
-
-        success_msg = "🌟 <b>لوحة التحكم تعمل:</b>" if lang == 'ar' else "🌟 <b>Dashboard is Active:</b>"
-        await chat.send_message(success_msg, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
-
-    except Exception as e:
-        logging.error(f"Error in check_activation_logic: {e}")
-        await chat.send_message(f"❌ خطأ فني في الربط، يرجى المحاولة لاحقاً.")
-
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    if not query or not query.data: return
-    uid = update.effective_user.id
-    data = query.data
-    await query.answer()
-
-    if data == 'home':
+    # معالجة القائمة الرئيسية (العودة)
+    elif data == 'home':
         await query.edit_message_text("🏠 <b>القائمة الرئيسية:</b>", reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
     
+    # بيانات الحساب من قاعدة البيانات
     elif data == 'acc':
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -137,6 +93,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         txt = f"👤 <b>بيانات الحساب:</b>\n\n• الحالة: {'فعال ✅' if user['is_activated'] else 'متوقف ❌'}\n• المتبقي: {get_time_remaining(user['expiry_date'])}\n• الرمز: <code>{user['secret_token']}</code>"
         await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة", callback_data='home')]]))
 
+    # تحديث الرمز السري (Token)
     elif data == 'gen_token':
         new_token = secrets.token_hex(8)
         with get_db() as conn:
@@ -145,11 +102,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 conn.commit()
         await query.edit_message_text(f"✅ تم تحديث الرمز: <code>{new_token}</code>", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة", callback_data='home')]]))
 
+    # ربط القنوات
     elif data == 'add_ch':
-        context.user_data['state'] = 'wait_ch'
         kb = [[KeyboardButton("📢 اختر القناة", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))]]
-        await context.bot.send_message(chat_id=uid, text="يرجى الضغط على الزر أدناه لاختيار القناة التي تريد ربطها:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True))
+        await context.bot.send_message(chat_id=uid, text="يرجى الضغط على الزر أدناه لاختيار القناة:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True))
 
+    # عرض القنوات المرتبطة وحذفها
     elif data == 'view_chs':
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -157,34 +115,46 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ents = cur.fetchall()
         if not ents: 
             return await query.edit_message_text("❌ لا قنوات مرتبطة حالياً.", reply_markup=await get_main_menu(uid))
-        kb = [[InlineKeyboardButton(f"🗑️ {e['entity_id']}", callback_data=f"del_{e['entity_id']}")] for e in ents]
+        kb = [[InlineKeyboardButton(f"🗑️ حذف {e['entity_id']}", callback_data=f"del_{e['entity_id']}")] for e in ents]
         kb.append([InlineKeyboardButton("🏠 عودة", callback_data='home')])
-        await query.edit_message_text("📺 قنواتك المرتبطة (اضغط للحذف):", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+        await query.edit_message_text("📺 قنواتك المرتبطة:", reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
+    # عرض روابط الويب هوك (Webhook)
     elif data == 'view_wh':
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("SELECT secret_token FROM users WHERE user_id = %s", (str(uid),))
-                user_res = cur.fetchone()
-                token = user_res['secret_token']
+                token = cur.fetchone()['secret_token']
                 cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
                 ents = cur.fetchall()
         if not ents: 
-            return await query.edit_message_text("⚠️ يرجى إضافة قناة أولاً لتظهر روابط الويب هوك.", reply_markup=await get_main_menu(uid))
+            return await query.edit_message_text("⚠️ يرجى إضافة قناة أولاً.", reply_markup=await get_main_menu(uid))
         txt = "🌐 <b>روابط الويب هوك الخاصة بك:</b>\n\n"
         for e in ents: txt += f"• <code>{DOMAIN}/webhook/{token}/{e['entity_id']}</code>\n"
         await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة", callback_data='home')]]))
 
-    elif data == 'admin_panel' and uid == ADMIN_ID:
-        kb = [[InlineKeyboardButton("🎫 إدارة الأكواد", callback_data='admin_durations'), InlineKeyboardButton("👥 المستخدمين", callback_data='admin_users')], [InlineKeyboardButton("🏠", callback_data='home')]]
-        await query.edit_message_text("👮 لوحة تحكم الإدارة - أهلاً بك يا مطور", reply_markup=InlineKeyboardMarkup(kb))
+    # --- ربط لوحة الأدمن (Admin Panel) ---
+    elif data == 'admin_panel':
+        if int(uid) == ADMIN_ID:
+            await admin.show_admin_panel(update, context)
+        else:
+            await query.answer("🚫 الوصول للمطور فقط.", show_alert=True)
+
+    # معالجات أكشن الأدمن (من ملف admin.py)
+    elif data == 'admin_users': await admin.list_users(update)
+    elif data == 'admin_stats': await admin.show_admin_stats(update)
+    elif data == 'admin_broadcast': await admin.start_broadcast(update, context)
+    elif data == 'admin_generate_code': await admin.show_generate_code_menu(update)
+    elif data.startswith('gen_days_'): await admin.process_generate_code(update, int(data.split('_')[2]))
+    elif data.startswith('manage_user_'): await admin.manage_single_user(update, data.split('_')[2])
+    elif data.startswith('adm_act_'): await admin.update_user_status(update, 'activate', data.split('_')[3])
+    elif data.startswith('adm_deact_'): await admin.update_user_status(update, 'deactivate', data.split('_')[3])
+    elif data.startswith('adm_del_'): await admin.update_user_status(update, 'delete', data.split('_')[3])
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message: return
-    
     uid = update.effective_user.id
     
-    # معالجة القنوات المشتركة (Chat Shared)
+    # معالجة استلام القناة المربوطة
     if update.message.chat_shared:
         tid = str(update.message.chat_shared.chat_id)
         with get_db() as conn:
@@ -192,58 +162,63 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (str(uid), tid))
                 conn.commit()
         await update.message.reply_text(f"✅ تم ربط القناة بنجاح: {tid}", reply_markup=ReplyKeyboardRemove())
-        context.user_data['state'] = None
         return await check_activation_logic(update, context)
 
-    if not update.message.text: return
-    text = update.message.text.strip()
-    
-    if context.user_data.get('state') == 'WAIT_CODE':
-        success, days = await activate_with_code(uid, text)
-        if success:
-            context.user_data['state'] = None
-            await update.message.reply_text(f"✅ تم تفعيل الاشتراك بنجاح لمدة {days} يوم!")
-            return await check_activation_logic(update, context)
-        else:
-            await update.message.reply_text("❌ الكود غير صحيح أو منتهي الصلاحية.")
+    # معالجة إدخال كود التفعيل أو الإذاعة
+    if update.message.text:
+        text = update.message.text.strip()
+        state = context.user_data.get('state')
+        
+        if state == 'WAIT_CODE':
+            success, days = await activate_with_code(uid, text)
+            if success:
+                context.user_data['state'] = None
+                await update.message.reply_text(f"✅ تم التفعيل لمدة {days} يوم!")
+                return await check_activation_logic(update, context)
+            else:
+                await update.message.reply_text("❌ كود خاطئ.")
+        
+        elif state == 'WAIT_BROADCAST_MSG' and uid == ADMIN_ID:
+            await admin.exec_broadcast(update, context)
 
-# --- Flask Server ---
+async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """التحقق من حالة الاشتراك في قاعدة البيانات"""
+    uid = update.effective_user.id
+    with get_db() as conn:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
+            user = cur.fetchone()
+    
+    if not user or not user['is_activated']:
+        context.user_data['state'] = 'WAIT_CODE'
+        await update.effective_chat.send_message("⚠️ اشتراكك غير نشط، يرجى إرسال الكود:")
+    else:
+        await update.effective_chat.send_message("🌟 مرحباً بك في لوحة التحكم:", reply_markup=await get_main_menu(uid))
+
+# --- Flask Server (Webhooks) ---
 @app.route('/')
-def index(): return "Mr.MHO Bot is Active", 200
+def index(): return "Server Active", 200
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def tv_webhook(token, target_id):
     raw_data = request.get_data(as_text=True)
+    # التحقق من صحة التوكن والقناة في قاعدة البيانات
     with get_db() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+        with conn.cursor() as cur:
             cur.execute("SELECT u.user_id FROM users u JOIN entities e ON u.user_id = e.user_id WHERE u.secret_token=%s AND e.entity_id=%s", (token, target_id))
-            user = cur.fetchone()
-            if not user: return jsonify({"error": "Unauthorized"}), 403
+            if not cur.fetchone(): return jsonify({"error": "Forbidden"}), 403
     
     requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
-        "chat_id": target_id, 
-        "text": f"🔔 <b>تنبيه إشارة جديدة:</b>\n\n{raw_data}", 
-        "parse_mode": "HTML"
+        "chat_id": target_id, "text": f"🔔 <b>تنبيه إشارة جديدة:</b>\n\n{raw_data}", "parse_mode": "HTML"
     })
-    return jsonify({"status": "success"}), 200
+    return jsonify({"status": "sent"}), 200
 
-# --- تشغيل البوت ---
 if __name__ == "__main__":
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-    
-    # 1. إضافة معالج الأخطاء أولاً
-    application.add_error_handler(errors.global_error_handler)
-    
-    # 2. إضافة المعالجات
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(handle_callback, pattern='^set_lang_'))
-    application.add_handler(CallbackQueryHandler(terms.handle_terms_callback, pattern='^(accept_terms|decline_terms)$'))
-    application.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
-    # 3. تشغيل الخدمات الجانبية
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000))), daemon=True).start()
     threading.Thread(target=keep_alive, daemon=True).start()
-    
-    # 4. بدء التشغيل مع تنظيف التحديثات المعلقة
     application.run_polling(drop_pending_updates=True)
