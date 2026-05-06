@@ -47,8 +47,8 @@ async def handle_terms_callback(update, context):
         
         # 2. استدعاء فحص الاشتراك من الملف الرئيسي
         from main import check_activation_logic
-        await check_activation_logic(update, context)
-        
+        await check_activation_logic(update, context, user_lang=user_lang)
+
     elif query.data == "decline_terms":
         # تحديث الرسالة لنص الرفض
         decline_text = i18n.get_text('decline_msg', lang=user_lang)
