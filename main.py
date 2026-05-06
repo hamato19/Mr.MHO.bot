@@ -156,9 +156,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith(('admin_', 'gen_days_', 'manage_', 'adm_')):
         if int(uid) == ADMIN_ID:
             if data == 'admin_users': await admin.list_users(update)
-            elif data == 'admin_stats': await admin.show_admin_stats(update)
+        elif data.startswith(('admin_', 'gen_days_', 'manage_', 'adm_')):
+        if int(uid) == ADMIN_ID:
+            if data == 'admin_users': 
+                await admin.list_users(update)
+            elif data == 'admin_stats': 
+                await admin.show_admin_stats(update)
             elif data.startswith('gen_days_'): 
-                await owner.process_generate_code(update, int(data.split('_')[2]))
+                # هذا هو الجزء المسؤول عن توليد الأكواد
+                days = int(data.split('_')[2])
+                await owner.process_generate_code(update, days)
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
