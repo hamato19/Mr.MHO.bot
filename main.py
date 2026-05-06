@@ -1,13 +1,17 @@
 import os, secrets, asyncio, threading, logging, datetime, requests, time
 from flask import Flask, request, jsonify
+# بقية الاستيرادات...
+from flask import Flask, request, jsonify
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton, KeyboardButtonRequestChat
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from psycopg2.extras import RealDictCursor
 
 # استيراد الدوال من الملفات المساعدة
-from database import get_db
-from auth import activate_with_code
+from database
+import get_db
+from auth 
+import activate_with_code
 import terms  
 import i18n
 
