@@ -32,26 +32,26 @@ async def check_user_access(uid, admin_id):
 
 async def activate_with_code(uid, code):
     """
-    تفعيل الرموز (10, 30, 60, 90 يوم) وحساب تاريخ الانتهاء بدقة
+    تفعيل الرموز وحساب تاريخ الانتهاء بدقة
     """
     with get_db() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            # البحث عن الكود في جدول activation_codes
-            cur.execute("SELECT duration_days FROM activation_codes WHERE code = %s AND is_used = FALSE", (code.strip(),))
+            # البحث عن الكود في جدول activation_codes (استخدام days_valid)
+            cur.execute("SELECT days_valid FROM activation_codes WHERE code = %s AND is_used = FALSE", (code.strip(),))
             res = cur.fetchone()
             
             if res:
-                days = res['duration_days']
+                days = res['days_valid']
                 # حساب تاريخ الانتهاء: الوقت الحالي + عدد الأيام من الكود
                 expiry = datetime.datetime.now() + datetime.timedelta(days=days)
                 
-                # 1. تحديث بيانات المستخدم وتفعيل العداد
+                # 1. تحديث بيانات المستخدم وتفعيل الحساب
                 cur.execute("""
                     UPDATE users SET is_activated = TRUE, expiry_date = %s 
                     WHERE user_id = %s
                 """, (expiry, str(uid)))
                 
-                # 2. حرق الكود وتسجيل من استخدمه ومتى (للأمان)
+                # 2. حرق الكود وتسجيل بيانات الاستخدام (used_by, used_at)
                 cur.execute("""
                     UPDATE activation_codes SET is_used = TRUE, used_by = %s, used_at = NOW() 
                     WHERE code = %s
