@@ -145,10 +145,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await admin.show_admin_panel(update, context)
 
     elif data.startswith(('admin_', 'gen_days_', 'manage_', 'adm_')):
+        elif data.startswith(('admin_', 'gen_days_', 'manage_', 'adm_')):
         if int(uid) == ADMIN_ID:
-            if data == 'admin_users': await admin.list_users(update)
-            elif data == 'admin_stats': await admin.show_admin_stats(update)
-            elif data.startswith('gen_days_'): await admin.process_generate_code(update, int(data.split('_')[2]))
+            if data == 'admin_users': 
+                await admin.list_users(update)
+            elif data == 'admin_stats': 
+                await admin.show_admin_stats(update)
+            elif data.startswith('gen_days_'): 
+                # التعديل هنا: استدعاء الدالة من ملف owner
+                await owner.process_generate_code(update, int(data.split('_')[2]))
+)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
