@@ -13,6 +13,7 @@ from database import get_db
 from auth import activate_with_code
 import terms
 import i18n
+import errors
 
 
 # الإعدادات الأساسية
@@ -236,7 +237,7 @@ def tv_webhook(token, target_id):
 # --- تشغيل البوت ---
 if __name__ == "__main__":
     application = ApplicationBuilder().token(BOT_TOKEN).build()
-    
+    application.add_error_handler(errors.global_error_handler)
     # إضافة المعالجات
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_callback, pattern='^set_lang_'))
