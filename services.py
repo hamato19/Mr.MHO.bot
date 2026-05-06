@@ -8,10 +8,9 @@ from psycopg2.extras import RealDictCursor
 import config
 
 def keep_alive():
-    """هذه هي الدالة المطلوبة لمنع السيرفر من النوم"""
+    """منع السيرفر من الدخول في وضع النوم"""
     while True:
         try: 
-            # يرسل طلب لنفسه كل 20 ثانية ليبقى السيرفر شغال
             if config.DOMAIN:
                 requests.get(config.DOMAIN, timeout=10)
         except Exception: 
@@ -62,6 +61,17 @@ def get_user_entities(uid):
             cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
             return cur.fetchall()
 
+def delete_entity(user_id, entity_id):
+    """حذف قناة مرتبطة بمستخدم محدد"""
+    with get_db() as conn:
+        if conn is None: return
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM entities WHERE user_id = %s AND entity_id = %s",
+                (str(user_id), str(entity_id))
+            )
+            conn.commit()
+
 def is_user_active(user):
     """فحص الاشتراك"""
     if not user or not user['is_activated']: return False
@@ -77,7 +87,7 @@ def get_time_remaining(expiry_date):
     return f"{diff.days} يوم و {diff.seconds // 3600} ساعة"
 
 def format_webhook_links(token, entities):
-    """تجهيز الروابط"""
+    """تجهيز الروابط للعرض في البوت"""
     if not entities: return "⚠️ لا توجد قنوات مرتبطة."
     txt = "🌐 <b>روابط الويب هوك:</b>\n\n"
     for e in entities:
