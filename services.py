@@ -1,52 +1,69 @@
 # services.py
 import datetime
-import config
+import secrets
 from database import get_db
 from psycopg2.extras import RealDictCursor
+import config
 
-def get_time_remaining(expiry_date):
-    """حساب الوقت المتبقي للاشتراك بتنسيق نصي جذاب"""
-    if not expiry_date: 
-        return "غير مفعل 🔓"
-    
-    now = datetime.datetime.now()
-    if now > expiry_date: 
-        return "منتهٍ 🛑"
-    
-    diff = expiry_date - now
-    days = diff.days
-    hours = diff.seconds // 3600
-    
-    if days > 0:
-        return f"{days} يوم و {hours} ساعة"
-    else:
-        return f"{hours} ساعة فقط"
+def initialize_user(uid):
+    """إضافة المستخدم لقاعدة البيانات إذا لم يكن موجوداً"""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO users (user_id, secret_token) 
+                VALUES (%s, %s) 
+                ON CONFLICT (user_id) DO NOTHING
+            """, (str(uid), secrets.token_hex(8)))
+            conn.commit()
 
 def get_user_data(uid):
-    """جلب بيانات المستخدم كاملة من قاعدة البيانات"""
+    """جلب بيانات المستخدم بالكامل"""
     with get_db() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("""
-                SELECT secret_token, expiry_date, is_activated 
-                FROM users WHERE user_id = %s
-            """, (str(uid),))
+            cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
             return cur.fetchone()
 
+def update_user_token(uid, new_token):
+    """تحديث رمز الويب هوك الخاص بالمستخدم"""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
+            conn.commit()
+
+def add_entity(uid, tid):
+    """ربط قناة جديدة بالمستخدم"""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (str(uid), tid))
+            conn.commit()
+
 def get_user_entities(uid):
-    """جلب القنوات المرتبطة بمستخدم معين"""
+    """جلب القنوات المرتبطة"""
     with get_db() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
             return cur.fetchall()
 
+def is_user_active(user):
+    """التحقق من صلاحية الاشتراك"""
+    if not user or not user['is_activated']:
+        return False
+    if user['expiry_date'] and datetime.datetime.now() > user['expiry_date']:
+        return False
+    return True
+
+def get_time_remaining(expiry_date):
+    """تنسيق الوقت المتبقي"""
+    if not expiry_date: return "غير مفعل 🔓"
+    now = datetime.datetime.now()
+    if now > expiry_date: return "منتهٍ 🛑"
+    diff = expiry_date - now
+    return f"{diff.days} يوم و {diff.seconds // 3600} ساعة"
+
 def format_webhook_links(token, entities):
-    """تجهيز روابط الويب هوك بشكل نصي منسق"""
-    if not entities:
-        return "⚠️ لا توجد قنوات مرتبطة حالياً."
-    
-    txt = "🌐 <b>روابط الويب هوك الخاصة بك:</b>\n\n"
-    for ent in entities:
-        target_id = ent['entity_id']
-        txt += f"• القناة <code>{target_id}</code>:\n"
-        txt += f"<code>{config.DOMAIN}/webhook/{token}/{target_id}</code>\n\n"
+    """تجهيز نصوص روابط الويب هوك"""
+    if not entities: return "⚠️ لا توجد قنوات مرتبطة."
+    txt = "🌐 <b>روابط الويب هوك:</b>\n\n"
+    for e in entities:
+        txt += f"• <code>{config.DOMAIN}/webhook/{token}/{e['entity_id']}</code>\n"
     return txt
