@@ -110,6 +110,24 @@ async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_T
 
 # --- باقي معالجات Callback و Flask (نفسها دون تغيير لضمان الاستقرار) ---
 # [كود handle_callback و tv_webhook و start...]
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    الدالة المسؤولة عن استقبال المستخدم عند كتابة /start
+    """
+    if not update.effective_user: return
+    
+    # مصفوفة أزرار اختيار اللغة
+    keyboard = [
+        [
+            InlineKeyboardButton("🇸🇦 العربية", callback_data='set_lang_ar'), 
+            InlineKeyboardButton("🇺🇸 English", callback_data='set_lang_en')
+        ]
+    ]
+    welcome_msg = "👋 مرحباً بك في نظام سمو الأرقام\nالرجاء اختيار اللغة:\n\nWelcome! Please choose your language:"
+    
+    # إرسال الرسالة مع الأزرار
+    await update.effective_chat.send_message(welcome_msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
 
 if __name__ == "__main__":
     application = ApplicationBuilder().token(BOT_TOKEN).build()
