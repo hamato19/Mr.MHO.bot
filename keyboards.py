@@ -13,18 +13,19 @@ def get_language_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 async def get_main_menu(uid, bot_username="bot"):
-    """القائمة الرئيسية للبوت"""
+    """القائمة الرئيسية للبوت بعد التحديث"""
     kb = [
         [
             InlineKeyboardButton("👤 حسابي", callback_data='acc'), 
-            InlineKeyboardButton("📢 ربط قناة", callback_data='add_ch')
+            InlineKeyboardButton("🔄 تجديد الاشتراك", callback_data='renew_sub') # تم إضافة الزر هنا
+        ],
+        [
+            InlineKeyboardButton("📢 ربط قناة", callback_data='add_ch'),
+            InlineKeyboardButton("📺 قنواتي", callback_data='view_chs')
         ],
         [
             InlineKeyboardButton("🌐 روابط الويب هوك", callback_data='view_wh'), 
             InlineKeyboardButton("🔄 تحديث الرمز", callback_data='gen_token')
-        ],
-        [
-            InlineKeyboardButton("📺 قنواتي المرتبطة", callback_data='view_chs')
         ],
         [
             InlineKeyboardButton("🤖 إضافة البوت كمشرف", url=f"https://t.me/{bot_username}?startchannel=true")
@@ -54,14 +55,14 @@ def get_channel_request_keyboard():
 
 def get_back_to_home():
     """زر العودة للقائمة الرئيسية"""
-    return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة", callback_data='home')]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة للقائمة الرئيسية", callback_data='home')]])
 
 def get_admin_main_keyboard():
-    """لوحة تحكم الأدمن الخاصة (المستخدمة داخل ملف admin.py)"""
+    """لوحة تحكم الأدمن الخاصة"""
     kb = [
         [InlineKeyboardButton("👥 قائمة المستخدمين", callback_data='admin_users')],
         [InlineKeyboardButton("📊 الإحصائيات", callback_data='admin_stats')],
-        [InlineKeyboardButton("🔑 توليد أكواد", callback_data='admin_gen_codes')],
+        [InlineKeyboardButton("🔑 توليد أكواد", callback_data='admin_generate_code')], # تم توحيد الـ callback
         [InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data='home')]
     ]
     return InlineKeyboardMarkup(kb)
