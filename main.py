@@ -91,6 +91,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     await query.answer()
 
+    # --- لغة واشتراطات ---
     if data.startswith('set_lang_'):
         selected_lang = data.split('_')[2]
         context.user_data['selected_lang'] = selected_lang
@@ -107,6 +108,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'home':
         await check_activation_logic(update, context)
     
+    # --- إدارة الحساب ---
     elif data == 'acc':
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -150,23 +152,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 conn.commit()
         await query.edit_message_text(f"✅ تم تحديث الرمز: <code>{new_token}</code>", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة", callback_data='home')]]))
 
+    # --- لوحة التحكم وتوليد الأكواد (فقط للأدمن) ---
     elif data == 'admin_panel' and int(uid) == ADMIN_ID:
         await admin.show_admin_panel(update, context)
 
     elif data.startswith(('admin_', 'gen_days_', 'manage_', 'adm_')):
-        if int(uid) == ADMIN_ID:
-            if data == 'admin_users': await admin.list_users(update)
-        elif data.startswith(('admin_', 'gen_days_', 'manage_', 'adm_')):
         if int(uid) == ADMIN_ID:
             if data == 'admin_users': 
                 await admin.list_users(update)
             elif data == 'admin_stats': 
                 await admin.show_admin_stats(update)
             elif data.startswith('gen_days_'): 
-                # هذا هو الجزء المسؤول عن توليد الأكواد
                 days = int(data.split('_')[2])
                 await owner.process_generate_code(update, days)
-
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
@@ -190,15 +188,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 context.user_data['state'] = None
                 await update.message.reply_text(f"✅ تم التفعيل لـ {days} يوم.")
                 return await check_activation_logic(update, context)
-            else: await update.message.reply_text("❌ كود خاطئ.")
+            else: 
+                await update.message.reply_text("❌ كود خاطئ.")
 
 async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if await owner.is_owner(uid):
         await owner.bypass_subscription(uid)
         msg_owner = "🌟 <b>مرحباً بك يا مِستر MOH</b>\nتم تفعيل صلاحيات المالك."
-        if update.callback_query: await update.callback_query.edit_message_text(msg_owner, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
-        else: await update.effective_chat.send_message(msg_owner, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
+        if update.callback_query: 
+            await update.callback_query.edit_message_text(msg_owner, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
+        else: 
+            await update.effective_chat.send_message(msg_owner, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
         return
 
     with get_db() as conn:
@@ -211,12 +212,15 @@ async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_T
         await subscription.send_renewal_request(update, context, user_data=user)
     else:
         text = "🏠 <b>القائمة الرئيسية:</b>"
-        if update.callback_query: await update.callback_query.edit_message_text(text, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
-        else: await update.effective_chat.send_message(text, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
+        if update.callback_query: 
+            await update.callback_query.edit_message_text(text, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
+        else: 
+            await update.effective_chat.send_message(text, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
 
 # --- Flask Server (Webhook) ---
 @app.route('/')
-def index(): return "🚀 Sumou System Online", 200
+def index(): 
+    return "🚀 Sumou System Online", 200
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def tv_webhook(token, target_id):
