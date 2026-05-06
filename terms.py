@@ -19,15 +19,12 @@ def get_terms_keyboard(lang='ar'):
 
 async def send_terms(update, context, user_lang='ar'):
     """إرسال نص الشروط والأحكام"""
-    # حفظ اللغة في بيانات المستخدم للرجوع لها لاحقاً
     context.user_data['selected_lang'] = user_lang
-    
     chat_id = update.effective_chat.id
     
-    # جلب النص من ملف i18n
+    # جلب النص من i18n
     terms_text = i18n.get_text('terms_body', lang=user_lang)
     
-    # محاولة تعديل الرسالة الحالية أو إرسال رسالة جديدة
     if update.callback_query:
         await update.callback_query.edit_message_text(
             text=terms_text,
@@ -47,24 +44,27 @@ async def handle_terms_callback(update, context):
     query = update.callback_query
     await query.answer()
     
-    # استرجاع اللغة التي اختارها المستخدم في البداية
     user_lang = context.user_data.get('selected_lang', 'ar')
     
     if query.data == "accept_terms":
-        # 1. إظهار نص النجاح/الموافقة
+        # 1. إظهار نص النجاح
         success_text = i18n.get_text('accept_msg', lang=user_lang)
-        await query.edit_message_text(success_text, parse_mode=ParseMode.HTML)
         
-        # 2. استدعاء دالة فحص الاشتراك من الملف الرئيسي
-        # تم وضع الاستيراد هنا لتجنب التعارض (Circular Import)
+        # تحسين: نحدث الرسالة ونعلم المستخدم أننا نتحقق من اشتراكه
+        wait_msg = f"{success_text}\n\n⏳ <b>جاري التحقق من الاشتراك...</b>" if user_lang == 'ar' else f"{success_text}\n\n⏳ <b>Verifying subscription...</b>"
+        await query.edit_message_text(wait_msg, parse_mode=ParseMode.HTML)
+        
+        # 2. الاستدعاء الآمن لملف main
         try:
             from main import check_activation_logic
-            # تأكد أن دالة check_activation_logic في main.py تقبل user_lang كمتغير اختياري
+            # الاستدعاء الآن متوافق مع التعديل اللي سويناه في main.py
             await check_activation_logic(update, context, user_lang=user_lang)
         except Exception as e:
-            print(f"Error calling check_activation_logic: {e}")
+            print(f"CRITICAL ERROR in terms.py: {e}")
+            # في حال حدث خطأ تقني، نحاول نفتح القائمة للأمان
+            from main import start
+            await start(update, context)
 
     elif query.data == "decline_terms":
-        # إظهار نص الرفض وتوقف العملية
         decline_text = i18n.get_text('decline_msg', lang=user_lang)
         await query.edit_message_text(decline_text, parse_mode=ParseMode.HTML)
