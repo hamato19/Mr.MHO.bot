@@ -96,6 +96,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         kb.append([telegram.InlineKeyboardButton("🏠 عودة", callback_data='home')])
         await query.edit_message_text("📺 القنوات المرتبطة:", reply_markup=telegram.InlineKeyboardMarkup(kb))
 
+    # --- إضافة دالة حذف القناة هنا ---
+    elif data.startswith('del_'):
+        entity_id = data.split('_')[1]
+        try:
+            services.delete_entity(uid, entity_id)
+            await query.answer(f"🗑️ تم حذف القناة: {entity_id}", show_alert=True)
+            # تحديث القائمة فوراً بعد الحذف
+            return await check_activation_logic(update, context)
+        except Exception as e:
+            logging.error(f"Delete Entity Error: {e}")
+            await query.answer("❌ فشل حذف القناة.")
+
     elif data == 'view_wh':
         user = services.get_user_data(uid)
         ents = services.get_user_entities(uid)
@@ -139,7 +151,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = update.message.text
     
-    # 1. إذا شارك المستخدم قناة
     if update.message.chat_shared:
         tid = str(update.message.chat_shared.chat_id)
         services.add_entity(uid, tid)
@@ -149,7 +160,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text:
         text = security.sanitize_input(text).strip()
         
-        # 2. التحقق التلقائي من كود التفعيل (MHO-XXXX)
         if text.upper().startswith("MHO-"):
             success, days = await activate_with_code(uid, text.upper())
             if success:
@@ -159,7 +169,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text("❌ عذراً، هذا الكود غير صحيح أو مستخدم مسبقاً.")
                 return
 
-        # 3. معالجة حالة انتظار الكود (إذا ضغط المستخدم زر تفعيل)
         if context.user_data.get('state') == 'WAIT_CODE':
             success, days = await activate_with_code(uid, text)
             if success:
