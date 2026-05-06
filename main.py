@@ -9,7 +9,7 @@ from psycopg2.extras import RealDictCursor
 from database import get_db
 from auth import activate_with_code
 import terms  # ملف إخلاء المسؤولية
-
+import i18n
 # الإعدادات الأساسية
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_ID = int(os.getenv('ADMIN_ID', 0))
@@ -58,7 +58,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     
     # رسالة ترحيبية أولية
-    await update.message.reply_text(f"🚀 مرحباً بك {user.first_name} في نظام سمو الأرقام")
+        # تحديد لغة المستخدم تلقائياً من إعدادات تلجرام (ar أو en)
+    lang = update.effective_user.language_code
+    user_lang = lang if lang in ['ar', 'en'] else 'ar'
+
+    # السطر 61: جلب الترحيب المناسب من ملف i18n
+    welcome_text = i18n.get_text('welcome', lang=user_lang, name=user.first_name)
+    await update.message.reply_text(welcome_text, parse_mode='HTML')
+
     
     # استدعاء شروط الاستخدام (إخلاء المسؤولية) فوراً
     await terms.send_terms(update, context)
