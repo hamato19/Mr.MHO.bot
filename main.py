@@ -53,29 +53,32 @@ async def get_main_menu(uid):
 # --- معالجات الأوامر (Handlers) ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """نقطة البداية: ترحب بالمستخدم وتعرض الشروط أولاً"""
+    """المرحلة الأولى: ترحيب واختيار اللغة لمنع مشاكل التكرار والترجمة"""
     if not update.effective_user: return
-    user = update.effective_user
     
-    # رسالة ترحيبية أولية
-            # تحديد لغة المستخدم (ar أو en) بناءً على بيانات تلجرام
-    telegram_lang = update.effective_user.language_code
-    if telegram_lang:
-        # نأخذ أول حرفين ونحولها لصغير عشان نضمن التطابق (en-us تصير en)
-        user_lang = 'en' if telegram_lang.lower().startswith('en') else 'ar'
-    else:
-        user_lang = 'ar'
-
-
-    # السطر 61: جلب الترحيب المناسب من ملف i18n
-    welcome_text = i18n.get_text('welcome', lang=user_lang, name=user.first_name)
-    await update.message.reply_text(welcome_text, parse_mode='HTML')
-
+    # بناء أزرار اختيار اللغة
+    keyboard = [
+        [
+            InlineKeyboardButton("🇸🇦 العربية", callback_data='set_lang_ar'),
+            InlineKeyboardButton("🇺🇸 English", callback_data='set_lang_en')
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # استدعاء شروط الاستخدام (إخلاء المسؤولية) فوراً
-    await terms.send_terms(update, context, user_lang=user_lang)
-    # التوقف هنا حتى يضغط المستخدم على "أوافق"
+    # رسالة ترحيبية موحدة باللغتين
+    welcome_msg = (
+        "👋 مرحباً بك في نظام سمو الأرقام\n"
+        "الرجاء اختيار اللغة المفضلة للبدء:\n\n"
+        "Welcome to Sumou Al-Arqam System\n"
+        "Please choose your preferred language to start:"
+    )
+    
+    # إرسال الرسالة مع الأزرار
+    await update.message.reply_text(welcome_msg, reply_markup=reply_markup)
+    
+    # التوقف هنا تماماً حتى يختار المستخدم اللغة
     return
+
 
 async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """دالة فرعية لفحص الاشتراك بعد قبول الشروط أو عند البدء"""
