@@ -87,21 +87,26 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # استدعاء الشروط فوراً بناءً على اختيار المستخدم
         await terms.send_terms(update, context, user_lang=selected_lang)
 
-
 async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """دالة فرعية لفحص الاشتراك بعد قبول الشروط أو عند البدء"""
+    """دالة فرعية لفحص الاشتراك مع استثناء خاص للمالك"""
     uid = update.effective_user.id
     
+    # 1. إضافة استثناء المالك فوراً قبل الدخول في قاعدة البيانات
+    if uid == ADMIN_ID:
+        await update.effective_chat.send_message(
+            "👑 <b>أهلاً بك يا مطور النظام (الوصول الإداري):</b>", 
+            reply_markup=await get_main_menu(uid), 
+            parse_mode=ParseMode.HTML
+        )
+        return
+
+    # 2. بقية الكود للمستخدمين العاديين يبدأ من هنا
     with get_db() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
             user = cur.fetchone()
-            if not user:
-                cur.execute("INSERT INTO users (user_id, secret_token, is_activated, expiry_date, created_at) VALUES (%s, %s, %s, %s, NOW())",
-                            (str(uid), secrets.token_hex(8), False, None))
-                conn.commit()
-                cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
-                user = cur.fetchone()
+            # ... تكملة كود الفحص الموجود عندك
+
 
     is_admin = (uid == ADMIN_ID)
     is_expired = user['expiry_date'] and datetime.datetime.now() > user['expiry_date']
