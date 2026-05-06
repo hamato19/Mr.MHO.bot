@@ -78,6 +78,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # التوقف هنا تماماً حتى يختار المستخدم اللغة
     return
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data.startswith('set_lang_'):
+        selected_lang = query.data.split('_')[2]
+        # استدعاء الشروط فوراً بناءً على اختيار المستخدم
+        await terms.send_terms(update, context, user_lang=selected_lang)
 
 
 async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -244,6 +252,7 @@ if __name__ == "__main__":
     
     # تسجيل المعالجات بالترتيب الصحيح
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(CallbackQueryHandler(terms.handle_terms_callback, pattern='^(accept_terms|decline_terms)$'))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
