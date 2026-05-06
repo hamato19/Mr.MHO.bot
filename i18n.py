@@ -1,39 +1,23 @@
-# قاموس النصوص الموحد للبوت
+# i18n.py
 STRINGS = {
     'ar': {
         'welcome': "🚀 مرحباً بك {name} في نظام سمو الأرقام",
-        'main_menu': "🌟 <b>لوحة تحكم النظام تعمل بكفاءة:</b>",
-        'acc_info': (
-            "👤 <b>بيانات الحساب:</b>\n\n"
-            "• الحالة: {status}\n"
-            "• المتبقي: {expiry}\n"
-            "• الرمز: <code>{token}</code>"
-        ),
-        'buy_code': "💳 شراء كود تفعيل",
-        'wait_code': "⚠️ <b>الوصول مقيد.</b>\nيرجى إرسال كود التفعيل للبدء:",
-        'expired': "❌ <b>انتهى اشتراكك!</b>\nيرجى إرسال كود جديد للتجديد:",
-        'invalid_code': "❌ الكود خاطئ أو مستخدم مسبقاً.",
-        'success_act': "✅ تم التفعيل بنجاح لمدة {days} يوم!",
-        'spam_alert': "⛔️ <b>عملية محظورة:</b> لقد تجاوزت حد الطلبات المسموح به.",
-        'banned_msg': "🚫 <b>وصول محظور:</b> حسابك محظور نهائياً من النظام.",
-        'db_error': "❌ عذراً، هناك مشكلة في الاتصال بقاعدة البيانات حالياً.",
-        'home_btn': "🏠 القائمة الرئيسية",
-        'back_btn': "🔙 عودة",
-        'admin_panel': "👮 لوحة تحكم الإدارة العليا",
+        'accept_msg': "✅ تم تسجيل موافقتك بنجاح.",
+        'decline_msg': "🚫 نعتذر، لا يمكن استخدام البوت دون الموافقة على الشروط.",
+        'wait_code': "⚠️ الوصول مقيد. يرجى إرسال **كود التفعيل**:",
     },
     'en': {
         'welcome': "🚀 Welcome {name} to Sumou Al-Arqam System",
-        'main_menu': "🌟 <b>System Dashboard is active:</b>",
-        'acc_info': (
-            "👤 <b>Account Details:</b>\n\n"
-            "• Status: {status}\n"
-            "• Remaining: {expiry}\n"
-            "• Token: <code>{token}</code>"
-        ),
-        'buy_code': "💳 Purchase Activation Code",
-        'wait_code': "⚠️ <b>Access Restricted.</b>\nPlease send your activation code:",
-        'expired': "❌ <b>Subscription Expired!</b>\nPlease send a new code:",
-        'invalid_code': "❌ Invalid or already used code.",
+        'accept_msg': "✅ Your agreement has been successfully recorded.",
+        'decline_msg': "🚫 Sorry, the bot cannot be used without agreeing to the terms.",
+        'wait_code': "⚠️ Access restricted. Please send your **activation code**:",
+    }
+}
+
+def get_text(key, lang='ar', **kwargs):
+    # يحاول جلب النص باللغة المختارة، وإذا لم يجدها يعود للعربية كافتراضي
+    text = STRINGS.get(lang, STRINGS['ar']).get(key, f"[{key}]")
+    return text.format(**kwargs)
         'success_act': "✅ Activation successful for {days} days!",
         'spam_alert': "⛔️ <b>Action Blocked:</b> Rate limit exceeded.",
         'banned_msg': "🚫 <b>Access Denied:</b> Your account is permanently banned.",
