@@ -88,47 +88,56 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await terms.send_terms(update, context, user_lang=selected_lang)
 
 async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """دالة فرعية لفحص الاشتراك مع استثناء خاص للمالك"""
+    """دالة فحص الاشتراك مع معالجة كاملة للأخطاء وفحص المالك"""
     uid = update.effective_user.id
     
-    # 1. إضافة استثناء المالك فوراً قبل الدخول في قاعدة البيانات
+    # 1. استثناء المالك (يدخل بدون فحص اشتراك)
     if uid == ADMIN_ID:
-        await update.effective_chat.send_message(
-            "👑 <b>أهلاً بك يا مطور النظام (الوصول الإداري):</b>", 
+        return await update.effective_chat.send_message(
+            "👑 <b>أهلاً بك يا مطور النظام:</b>\nتم التحقق من هويتك بنجاح.", 
             reply_markup=await get_main_menu(uid), 
             parse_mode=ParseMode.HTML
         )
-        return
 
-    # 2. بقية الكود للمستخدمين العاديين يبدأ من هنا
-    with get_db() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
-            user = cur.fetchone()
-            # ... تكملة كود الفحص الموجود عندك
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
+                user = cur.fetchone()
+                
+                # 2. إذا كان المستخدم جديداً تماماً، نسجله في القاعدة
+                if not user:
+                    cur.execute("""
+                        INSERT INTO users (user_id, secret_token, is_activated, expiry_date, created_at) 
+                        VALUES (%s, %s, %s, %s, NOW())
+                    """, (str(uid), secrets.token_hex(8), False, None))
+                    conn.commit()
+                    # إعادة جلب البيانات بعد الإنشاء
+                    cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
+                    user = cur.fetchone()
 
+        # 3. فحص الصلاحية والاشتراك
+        is_expired = user['expiry_date'] and datetime.datetime.now() > user['expiry_date']
 
-    is_admin = (uid == ADMIN_ID)
-    is_expired = user['expiry_date'] and datetime.datetime.now() > user['expiry_date']
+        if not user['is_activated'] or is_expired:
+            context.user_data['state'] = 'WAIT_CODE'
+            msg = "⚠️ <b>الوصول مقيد.</b>\nيرجى إرسال كود التفعيل للبدء:"
+            if is_expired: msg = "❌ <b>انتهى اشتراكك!</b>\nيرجى إرسال كود جديد للتجديد:"
+            
+            kb = [[InlineKeyboardButton("💳 شراء كود", url=f"tg://user?id={ADMIN_ID}")]]
+            return await update.effective_chat.send_message(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
 
-    if not is_admin and (not user['is_activated'] or is_expired):
-        context.user_data['state'] = 'WAIT_CODE'
-        msg = "⚠️ <b>الوصول مقيد.</b>\nيرجى إرسال كود التفعيل الخاص بك للبدء:"
-        if is_expired: msg = "❌ <b>انتهى اشتراكك!</b>\nيرجى إرسال كود جديد للتجديد:"
-        
-        kb = [[InlineKeyboardButton("💳 شراء كود", url=f"tg://user?id={ADMIN_ID}")]]
-        return await update.effective_chat.send_message(msg, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+        # 4. إذا كان كل شيء سليم
+        await update.effective_chat.send_message(
+            "🌟 <b>لوحة تحكم النظام تعمل بكفاءة:</b>", 
+            reply_markup=await get_main_menu(uid), 
+            parse_mode=ParseMode.HTML
+        )
 
-    await update.effective_chat.send_message("🌟 <b>لوحة تحكم النظام تعمل بكفاءة:</b>", reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        logging.error(f"Database error: {e}")
+        await update.effective_chat.send_message(f"❌ <b>خطأ فني في قاعدة البيانات:</b>\n<code>{e}</code>", parse_mode=ParseMode.HTML)
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    uid = update.effective_user.id
-    data = query.data
-    await query.answer()
-
-    if data == 'home':
-        await query.edit_message_text("🏠 <b>القائمة الرئيسية:</b>", reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
     
     elif data == 'acc':
         with get_db() as conn:
