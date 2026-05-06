@@ -12,7 +12,8 @@ import admin
 import terms
 import i18n
 import errors
-import subscription  # الملف الجديد اللي فصلنا فيه منطق التجديد
+import subscription
+import owner  # ملف استثناء المالك
 
 # الإعدادات الأساسية
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -61,12 +62,16 @@ async def get_main_menu(uid):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_user: return
-    # تسجيل المستخدم في القاعدة إذا لم يكن موجوداً
-    uid = str(update.effective_user.id)
+    uid = update.effective_user.id
+    
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO users (user_id, secret_token) VALUES (%s, %s) ON CONFLICT DO NOTHING", (uid, secrets.token_hex(8)))
+            cur.execute("INSERT INTO users (user_id, secret_token) VALUES (%s, %s) ON CONFLICT DO NOTHING", (str(uid), secrets.token_hex(8)))
             conn.commit()
+
+    # استثناء المالك فوراً
+    if await owner.is_owner(uid):
+        return await check_activation_logic(update, context)
 
     keyboard = [[InlineKeyboardButton("🇸🇦 العربية", callback_data='set_lang_ar'), InlineKeyboardButton("🇺🇸 English", callback_data='set_lang_en')]]
     welcome_msg = "👋 مرحباً بك في نظام سمو الأرقام\nالرجاء اختيار اللغة:\n\nWelcome! Please choose your language:"
@@ -84,8 +89,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await terms.send_terms(update, context, user_lang=selected_lang)
 
     elif data == 'accept_terms':
-        # بعد الموافقة، نتحقق من التفعيل فوراً
         await check_activation_logic(update, context)
+
+    elif data == 'decline_terms':
+        try: await query.delete_message()
+        except: pass
+        await start(update, context)
 
     elif data == 'home':
         await check_activation_logic(update, context)
@@ -100,7 +109,37 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == 'add_ch':
         kb = [[KeyboardButton("📢 اختر القناة", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))]]
-        await context.bot.send_message(chat_id=uid, text="يرجى الضغط على الزر أدناه لاختيار القناة:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True))
+        await context.bot.send_message(chat_id=uid, text="يرجى الضغط على الزر أدناه لاختيار القناة المراد ربطها:", reply_markup=ReplyKeyboardMarkup(kb, resize_keyboard=True, one_time_keyboard=True))
+
+    elif data == 'view_chs':
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
+                ents = cur.fetchall()
+        if not ents: return await query.edit_message_text("❌ لا توجد قنوات مرتبطة.", reply_markup=await get_main_menu(uid))
+        kb = [[InlineKeyboardButton(f"🗑️ حذف {e['entity_id']}", callback_data=f"del_{e['entity_id']}")] for e in ents]
+        kb.append([InlineKeyboardButton("🏠 عودة", callback_data='home')])
+        await query.edit_message_text("📺 القنوات المرتبطة:", reply_markup=InlineKeyboardMarkup(kb))
+
+    elif data == 'view_wh':
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT secret_token FROM users WHERE user_id = %s", (str(uid),))
+                token = cur.fetchone()['secret_token']
+                cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
+                ents = cur.fetchall()
+        if not ents: return await query.edit_message_text("⚠️ اربط قناة أولاً.", reply_markup=await get_main_menu(uid))
+        txt = "🌐 <b>روابط الويب هوك:</b>\n\n"
+        for e in ents: txt += f"• <code>{DOMAIN}/webhook/{token}/{e['entity_id']}</code>\n"
+        await query.edit_message_text(txt, parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة", callback_data='home')]]))
+
+    elif data == 'gen_token':
+        new_token = secrets.token_hex(8)
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
+                conn.commit()
+        await query.edit_message_text(f"✅ تم تحديث الرمز: <code>{new_token}</code>", parse_mode=ParseMode.HTML, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة", callback_data='home')]]))
 
     elif data == 'admin_panel' and int(uid) == ADMIN_ID:
         await admin.show_admin_panel(update, context)
@@ -121,25 +160,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             with conn.cursor() as cur:
                 cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (str(uid), tid))
                 conn.commit()
-        await update.message.reply_text(f"✅ تم ربط القناة بنجاح: {tid}", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(f"✅ تم ربط القناة: {tid}", reply_markup=ReplyKeyboardRemove())
         return await check_activation_logic(update, context)
 
     if update.message.text:
         text = update.message.text.strip()
         state = context.user_data.get('state')
-
         if state == 'WAIT_CODE':
             success, days = await activate_with_code(uid, text)
             if success:
                 context.user_data['state'] = None
-                await update.message.reply_text(f"✅ <b>تم التفعيل!</b> لـ {days} يوم.", parse_mode=ParseMode.HTML)
+                await update.message.reply_text(f"✅ تم التفعيل لـ {days} يوم.")
                 return await check_activation_logic(update, context)
-            else:
-                await update.message.reply_text("❌ كود خاطئ أو مستخدم.")
+            else: await update.message.reply_text("❌ كود خاطئ.")
 
 async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     context.bot_data['admin_id'] = ADMIN_ID 
+
+    # استثناء المالك
+    if await owner.is_owner(uid):
+        await owner.bypass_subscription(uid)
+        msg_owner = "🌟 <b>مرحباً بك يا مِستر MOH</b>\nتم تفعيل صلاحيات المالك."
+        if update.callback_query: return await update.callback_query.edit_message_text(msg_owner, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
+        else: return await update.effective_chat.send_message(msg_owner, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
 
     with get_db() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -147,32 +191,37 @@ async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_T
             user = cur.fetchone()
     
     now = datetime.datetime.now()
-    # التحقق من الحالة: إذا لم يكن مسجلاً، أو غير مفعل، أو الاشتراك منتهي
     if not user or not user['is_activated'] or (user['expiry_date'] and now > user['expiry_date']):
-        # استدعاء ملف التجديد المنفصل لعرض الحالة وطلب الكود
         await subscription.send_renewal_request(update, context, user_data=user)
     else:
-        # إذا كان كل شيء سليم، نعرض القائمة الرئيسية
         text = "🏠 <b>القائمة الرئيسية:</b>"
-        if update.callback_query:
-            await update.callback_query.edit_message_text(text, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
-        else:
-            await update.effective_chat.send_message(text, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
+        if update.callback_query: await update.callback_query.edit_message_text(text, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
+        else: await update.effective_chat.send_message(text, reply_markup=await get_main_menu(uid), parse_mode=ParseMode.HTML)
 
-# --- Flask Server ---
+# --- Flask Server (Webhook) ---
 @app.route('/')
-def index(): return "Server Active", 200
+def index(): return "🚀 Sumou System Online", 200
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def tv_webhook(token, target_id):
+    # استقبال البيانات كما هي من TradingView
     raw_data = request.get_data(as_text=True)
+    
     with get_db() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT u.user_id FROM users u JOIN entities e ON u.user_id = e.user_id WHERE u.secret_token=%s AND e.entity_id=%s AND u.is_activated=TRUE", (token, target_id))
-            if not cur.fetchone(): return jsonify({"error": "Forbidden"}), 403
+            # التحقق من صحة التوكن وربطه بالقناة وتفعيل المستخدم
+            cur.execute("""
+                SELECT u.user_id FROM users u 
+                JOIN entities e ON u.user_id = e.user_id 
+                WHERE u.secret_token=%s AND e.entity_id=%s AND u.is_activated=TRUE
+            """, (token, target_id))
+            if not cur.fetchone(): return jsonify({"error": "Unauthorized"}), 403
     
+    # إرسال الإشارة خام (نفس TradingView بالضبط) وبدون أي إضافات
     requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json={
-        "chat_id": target_id, "text": f"🔔 <b>تنبيه إشارة جديدة:</b>\n\n{raw_data}", "parse_mode": "HTML"
+        "chat_id": target_id, 
+        "text": raw_data, 
+        "parse_mode": None # نضعه None لضمان عدم حدوث أخطاء في تنسيق الرموز الخاصة
     })
     return jsonify({"status": "sent"}), 200
 
