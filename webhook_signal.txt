@@ -1,0 +1,9 @@
+{
+  "ticker": "TASI",
+  "action": "buy",
+  "price": "12450.50",
+  "time": "2026-05-06T22:15:00Z",
+  "signal": "Golden Cross Detected",
+  "strategy": "Sumou Strategy V3",
+  "chat_id": "YOUR_CHANNEL_ID"
+}
