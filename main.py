@@ -137,23 +137,37 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     uid = update.effective_user.id
+    text = update.message.text
     
+    # 1. إذا شارك المستخدم قناة
     if update.message.chat_shared:
         tid = str(update.message.chat_shared.chat_id)
         services.add_entity(uid, tid)
         await update.message.reply_text(f"✅ تم ربط القناة: {tid}", reply_markup=ReplyKeyboardRemove())
         return await check_activation_logic(update, context)
 
-    if update.message.text:
-        text = security.sanitize_input(update.message.text)
+    if text:
+        text = security.sanitize_input(text).strip()
+        
+        # 2. التحقق التلقائي من كود التفعيل (MHO-XXXX)
+        if text.upper().startswith("MHO-"):
+            success, days = await activate_with_code(uid, text.upper())
+            if success:
+                await update.message.reply_text(f"✅ تم تفعيل اشتراكك بنجاح لمدة {days} يوم!")
+                return await check_activation_logic(update, context)
+            else:
+                await update.message.reply_text("❌ عذراً، هذا الكود غير صحيح أو مستخدم مسبقاً.")
+                return
+
+        # 3. معالجة حالة انتظار الكود (إذا ضغط المستخدم زر تفعيل)
         if context.user_data.get('state') == 'WAIT_CODE':
             success, days = await activate_with_code(uid, text)
             if success:
                 context.user_data['state'] = None
-                await update.message.reply_text(f"✅ تم التفعيل لـ {days} يوم.")
+                await update.message.reply_text(f"✅ تم تفعيل الاشتراك لـ {days} يوم.")
                 return await check_activation_logic(update, context)
             else: 
-                await update.message.reply_text("❌ كود خاطئ.")
+                await update.message.reply_text("❌ الكود غير صحيح.")
 
 async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
