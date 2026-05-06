@@ -11,7 +11,7 @@ from telegram import Update, ReplyKeyboardRemove
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
-# استيراد الملفات المساعدة (تأكد من وجودها في نفس المجلد)
+# استيراد الملفات المساعدة
 import config
 import keyboards
 import services
@@ -39,7 +39,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     services.initialize_user(uid)
 
-    # إذا كان الأدمن، يدخل مباشرة للقائمة
     if int(uid) == ADMIN_ID:
         return await check_activation_logic(update, context)
 
@@ -58,14 +57,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bot_me = await context.bot.get_me()
     await query.answer()
 
-    # فحص الحظر (باستثناء الأدمن)
     if int(uid) != ADMIN_ID:
         is_blocked, _ = security.is_user_blocked(uid)
         if is_blocked:
             await query.answer("🚫 حسابك مقيد حالياً.", show_alert=True)
             return
 
-    # --- قسم اللغات والشروط ---
     if data.startswith('set_lang_'):
         lang = data.split('_')[2]
         context.user_data['selected_lang'] = lang
@@ -75,7 +72,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'home':
         await check_activation_logic(update, context)
 
-    # --- إدارة الحساب والقنوات ---
     elif data == 'acc':
         user = services.get_user_data(uid)
         time_left = services.get_time_remaining(user['expiry_date'])
@@ -88,23 +84,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await query.edit_message_text("❌ لا توجد قنوات مرتبطة.", reply_markup=keyboards.get_back_to_home())
         await query.edit_message_text("📺 قنواتك المرتبطة:", reply_markup=await keyboards.get_entities_keyboard(ents))
 
-    # --- قسم الإدارة (للأدمن فقط) ---
+    # --- قسم الإدارة (تم إصلاح زر التوليد هنا) ---
     elif data.startswith(('admin_', 'gen_days_', 'manage_', 'adm_')):
         if int(uid) != ADMIN_ID: return
         
-        if data == 'admin_panel': await admin.show_admin_panel(update, context)
-        elif data == 'admin_stats': await admin.show_admin_stats(update)
-        elif data == 'admin_users': await admin.list_users(update)
-        elif data == 'admin_generate_code': await admin.show_generate_code_menu(update)
+        if data == 'admin_panel': 
+            await admin.show_admin_panel(update, context)
+        elif data == 'admin_stats': 
+            await admin.show_admin_stats(update)
+        elif data == 'admin_users': 
+            await admin.list_users(update)
+        # هنا الإصلاح: دمج الاحتمالين لزر التوليد لضمان العمل
+        elif data in ['admin_generate_code', 'admin_gen_codes']:
+            await admin.show_generate_code_menu(update)
         elif data.startswith('gen_days_'):
             days = int(data.split('_')[-1])
             await admin.process_generate_code(update, days)
         elif data.startswith('adm_'):
-            # معالجة أوامر تفعيل/تعطيل المستخدمين من الإدارة
             parts = data.split('_')
             await admin.handle_admin_actions(update, parts[1], parts[2])
 
-# --- 3. معالج الرسائل النصية (Message Handler) ---
+# --- 3. معالج الرسائل النصية ---
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
@@ -112,7 +112,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user_fullname = update.effective_user.full_name
 
-    # التعامل مع مشاركة القنوات
     if update.message.chat_shared:
         tid = str(update.message.chat_shared.chat_id)
         services.add_entity(uid, tid)
@@ -121,7 +120,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not text: return
     
-    # حماية: فحص الحظر والمحتوى الخبيث (باستثناء الأدمن)
     if int(uid) != ADMIN_ID:
         is_blocked, mins = security.is_user_blocked(uid)
         if is_blocked:
@@ -132,7 +130,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(ADMIN_ID, f"🛡️ محاولة تخريب من: {user_fullname} ({uid})\nالنص: {text}")
             return await update.message.reply_text("🚫 تم حظرك نهائياً لمحاولة التخريب.")
 
-    # معالجة أكواد التفعيل
     if text.upper().startswith("MHO-") or context.user_data.get('state') == 'WAIT_CODE':
         success, days = await activate_with_code(uid, text.upper().strip())
         if success:
@@ -147,7 +144,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text(f"❌ كود خاطئ. متبقي {3-att} محاولات.")
 
-# --- 4. منطق التحقق من الاشتراك ---
+# --- 4. التحقق من الاشتراك ---
 
 async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -168,11 +165,10 @@ async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_T
     else:
         await update.effective_chat.send_message(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
 
-# --- 5. Flask Webhook (الإشارات الخام) ---
+# --- 5. Flask Webhook (الرسائل الخام) ---
 
 @app.route('/webhook/<token>/<target_id>', methods=['POST'])
 def tv_webhook(token, target_id):
-    # استقبال الإشارة كنص خام (TXT)
     raw_data = request.get_data(as_text=True)
     
     with get_db() as conn:
@@ -184,23 +180,20 @@ def tv_webhook(token, target_id):
             """, (token, target_id))
             if not cur.fetchone(): return jsonify({"error": "Unauthorized"}), 403
 
-    # إرسال البيانات الخام مباشرة دون أي تعديل
     requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", 
                   json={"chat_id": target_id, "text": raw_data})
     return jsonify({"status": "sent"}), 200
 
-# --- 6. التشغيل النهائي ---
+# --- 6. التشغيل ---
 
 if __name__ == "__main__":
     init_db.initialize_database()
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     
-    # الترتيب مهم جداً لعمل الأزرار
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
-    # تشغيل السيرفر في الخلفية
     threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000))), daemon=True).start()
     threading.Thread(target=services.keep_alive, daemon=True).start()
     
