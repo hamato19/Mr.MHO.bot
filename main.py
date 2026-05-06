@@ -59,8 +59,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # رسالة ترحيبية أولية
         # تحديد لغة المستخدم تلقائياً من إعدادات تلجرام (ar أو en)
-    lang = update.effective_user.language_code
-    user_lang = lang if lang in ['ar', 'en'] else 'ar'
+    lang = (update.effective_user.language_code or 'ar').lower()
+    user_lang = 'en' if lang.startswith('en') else 'ar'
 
     # السطر 61: جلب الترحيب المناسب من ملف i18n
     welcome_text = i18n.get_text('welcome', lang=user_lang, name=user.first_name)
