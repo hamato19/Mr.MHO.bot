@@ -68,8 +68,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     
     # استدعاء شروط الاستخدام (إخلاء المسؤولية) فوراً
-    await terms.send_terms(update, context)
-    
+    await terms.send_terms(update, context, user_lang=user_lang)
     # التوقف هنا حتى يضغط المستخدم على "أوافق"
     return
 
