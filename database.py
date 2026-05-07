@@ -36,7 +36,7 @@ def init_db():
     except Exception as e:
         logging.error(f"❌ فشل في تهيئة الجداول: {e}")
 
-# --- 2. إدارة المستخدمين (Users Management) ---
+# --- 2. إدارة المستخدمين والاحصائيات ---
 
 def get_admin_dashboard_stats():
     """جلب إحصائيات لوحة التحكم للأدمن باستعلام واحد سريع"""
@@ -55,7 +55,7 @@ def get_admin_dashboard_stats():
         return 0, 0, 0
 
 def get_all_users():
-    """جلب كافة المستخدمين المسجلين (إدارة المستخدمين)"""
+    """جلب قائمة المستخدمين للإدارة"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -66,7 +66,7 @@ def get_all_users():
         return []
 
 def register_user_if_not_exists(user_id):
-    """تسجيل مستخدم جديد تلقائياً"""
+    """تسجيل مستخدم جديد"""
     secret_token = secrets.token_urlsafe(24)
     try:
         with get_db() as conn:
@@ -81,7 +81,7 @@ def register_user_if_not_exists(user_id):
         logging.error(f"Error registering user: {e}")
 
 def get_user_profile(user_id):
-    """جلب بيانات حساب المستخدم"""
+    """بيانات ملف المستخدم"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -91,10 +91,10 @@ def get_user_profile(user_id):
         logging.error(f"Error fetching profile: {e}")
         return None
 
-# --- 3. إدارة الرموز والويب هوك ---
+# --- 3. إدارة التوكن والقنوات ---
 
 def update_user_secret_token(user_id):
-    """تحديث التوكن السري للمستخدم"""
+    """تحديث رمز الويب هوك الخاص بالمستخدم"""
     new_token = secrets.token_urlsafe(24)
     try:
         with get_db() as conn:
@@ -106,10 +106,8 @@ def update_user_secret_token(user_id):
         logging.error(f"Error updating token: {e}")
         return None
 
-# --- 4. إدارة القنوات (Entities) ---
-
 def add_entity(user_id, entity_id, entity_name):
-    """ربط قناة أو مجموعة جديدة"""
+    """إضافة قناة أو مجموعة للمستخدم"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -125,7 +123,7 @@ def add_entity(user_id, entity_id, entity_name):
         return False
 
 def get_user_entities(user_id):
-    """جلب القنوات المرتبطة"""
+    """جلب قنوات المستخدم"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -135,22 +133,10 @@ def get_user_entities(user_id):
         logging.error(f"Error fetching entities: {e}")
         return []
 
-def delete_entity(user_id, entity_id):
-    """حذف قناة مرتبطة"""
-    try:
-        with get_db() as conn:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (str(user_id), str(entity_id)))
-                conn.commit()
-                return True
-    except Exception as e:
-        logging.error(f"Error deleting entity: {e}")
-        return False
-
-# --- 5. نظام التفعيل وتوليد الأكواد (حل مشكلة AttributeError) ---
+# --- 4. نظام التفعيل وتوليد الأكواد (إصلاح خطأ column days) ---
 
 def add_subscription_code(code, days=30):
-    """توليد كود اشتراك جديد وحفظه في جدول activation_codes"""
+    """إضافة كود جديد لقاعدة البيانات"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -165,7 +151,7 @@ def add_subscription_code(code, days=30):
         return False
 
 def activate_user_with_code(user_id, code):
-    """تفعيل اشتراك المستخدم بعد التحقق من الكود"""
+    """استخدام الكود لتفعيل اشتراك المستخدم"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
