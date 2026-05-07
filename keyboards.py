@@ -86,3 +86,14 @@ def get_renewal_keyboard():
     ]
     return InlineKeyboardMarkup(kb)
 
+def get_entities_keyboard(entities):
+    """توليد أزرار للقنوات المضافة مع خيار حذفها"""
+    keyboard = []
+    for ent in entities:
+        # ent[0] هو المعرف (ID) و ent[1] هو اسم القناة أو اليوزرنيم
+        btn_text = f"❌ {ent[1]}"
+        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"del_ent_{ent[0]}")])
+    
+    keyboard.append([InlineKeyboardButton("🏠 عودة للرئيسية", callback_data='home')])
+    return InlineKeyboardMarkup(keyboard)
+
