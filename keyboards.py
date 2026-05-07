@@ -103,3 +103,6 @@ def get_generation_menu():
         [InlineKeyboardButton("🔙 عودة للوحة الأدمن", callback_data='adm')]
     ]
     return InlineKeyboardMarkup(kb)
+def get_back_to_admin():
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للوحة المالك", callback_data='adm')]])
