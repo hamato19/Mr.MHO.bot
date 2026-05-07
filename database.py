@@ -54,6 +54,17 @@ def get_admin_dashboard_stats():
         logging.error(f"Error fetching stats: {e}")
         return 0, 0, 0
 
+def get_all_users():
+    """جلب قائمة آخر 20 مستخدم مسجل لإدارتهم"""
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT user_id, is_activated, expiry_date FROM users ORDER BY id DESC LIMIT 20")
+                return cur.fetchall()
+    except Exception as e:
+        logging.error(f"Error fetching users: {e}")
+        return []
+
 def register_user_if_not_exists(user_id):
     """تسجيل مستخدم جديد تلقائياً"""
     secret_token = secrets.token_urlsafe(24)
