@@ -8,9 +8,9 @@ def get_back_home():
 async def get_main_menu(uid, bot_username="bot"):
     """القائمة الرئيسية"""
     kb = [
-        [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🔄 تجديد", callback_data='ren')],
-        [InlineKeyboardButton("📢 ربط قناة", callback_data='add_channel'), InlineKeyboardButton("📺 قنواتي", callback_data='chs')],
-        [InlineKeyboardButton("🌐 الويب هوك", callback_data='wh'), InlineKeyboardButton("🔄 تحديث الرمز", callback_data='tok')],
+        [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🔄  تجديد الاشتراك", callback_data='ren')],
+        [InlineKeyboardButton("📢 اضافة قناة", callback_data='add_channel'), InlineKeyboardButton("حذف /قنواتي", callback_data='chs')],
+        [InlineKeyboardButton("🌐  رابط الويب هوك", callback_data='wh'), InlineKeyboardButton("🔄 توليد رمز امان جديد", callback_data='tok')],
         [InlineKeyboardButton("🤖 إضافة البوت كمشرف", url=f"https://t.me/{bot_username}?startchannel=true")],
         [InlineKeyboardButton("☎️ الدعم الفني", url=config.SUPPORT_LINK)]
     ]
@@ -57,10 +57,13 @@ def get_request_channel_keyboard():
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
 def get_admin_keyboard():
-    """لوحة تحكم الأدمن"""
+    """لوحة تحكم الأدمن المحدثة"""
     kb = [
-        [InlineKeyboardButton("📊 الإحصائيات", callback_data='adm')], # تحديث الإحصائيات بنفس الزر
-        [InlineKeyboardButton("🔑 توليد أكواد", callback_data='adm_g')],
-        [InlineKeyboardButton("🏠 الرئيسية", callback_data='home')]
+        [
+            InlineKeyboardButton("📊 الإحصائيات", callback_data='adm_s'),
+            InlineKeyboardButton("👥 إدارة المستخدمين", callback_data='adm_u')
+        ],
+        [InlineKeyboardButton("🔑 توليد أكواد تفعيل", callback_data='adm_g')],
+        [InlineKeyboardButton("🏠 العودة للرئيسية", callback_data='home')]
     ]
     return InlineKeyboardMarkup(kb)
