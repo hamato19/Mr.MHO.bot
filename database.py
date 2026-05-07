@@ -12,6 +12,7 @@ def get_db():
     try:
         # الاتصال باستخدام رابط Neon المخزن في config
         conn = psycopg2.connect(config.DATABASE_URL, sslmode='require')
+        # اختيارياً: يمكنك جعل كل العمليات تعيد RealDictCursor تلقائياً
         yield conn
     except Exception as e:
         logging.error(f"❌ خطأ في قاعدة البيانات: {e}")
@@ -20,4 +21,21 @@ def get_db():
         raise e
     finally:
         if conn:
-            conn.close()
+            if not conn.closed:
+                conn.close()
+
+def init_db():
+    """دالة اختيارية للتأكد من هيكلة الجداول عند بدء التشغيل"""
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            # التأكد من وجود الجداول الأساسية
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS entities (
+                    id SERIAL PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    entity_id TEXT NOT NULL,
+                    entity_name TEXT,
+                    UNIQUE(user_id, entity_id)
+                );
+            """)
+            conn.commit()
