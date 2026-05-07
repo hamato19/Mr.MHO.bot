@@ -36,10 +36,10 @@ def init_db():
     except Exception as e:
         logging.error(f"❌ فشل في تهيئة الجداول: {e}")
 
-# --- 2. إدارة المستخدمين والاحصائيات ---
+# --- 2. إدارة المستخدمين والإحصائيات ---
 
 def get_admin_dashboard_stats():
-    """جلب إحصائيات لوحة التحكم للأدمن باستعلام واحد سريع"""
+    """جلب إحصائيات لوحة التحكم للأدمن"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -54,19 +54,8 @@ def get_admin_dashboard_stats():
         logging.error(f"Error fetching stats: {e}")
         return 0, 0, 0
 
-def get_all_users():
-    """جلب قائمة المستخدمين للإدارة"""
-    try:
-        with get_db() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT user_id, is_activated, expiry_date FROM users ORDER BY id DESC LIMIT 20")
-                return cur.fetchall()
-    except Exception as e:
-        logging.error(f"Error fetching users: {e}")
-        return []
-
 def register_user_if_not_exists(user_id):
-    """تسجيل مستخدم جديد"""
+    """تسجيل مستخدم جديد تلقائياً"""
     secret_token = secrets.token_urlsafe(24)
     try:
         with get_db() as conn:
@@ -81,7 +70,7 @@ def register_user_if_not_exists(user_id):
         logging.error(f"Error registering user: {e}")
 
 def get_user_profile(user_id):
-    """بيانات ملف المستخدم"""
+    """جلب بيانات حساب المستخدم"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -94,7 +83,7 @@ def get_user_profile(user_id):
 # --- 3. إدارة التوكن والقنوات ---
 
 def update_user_secret_token(user_id):
-    """تحديث رمز الويب هوك الخاص بالمستخدم"""
+    """تحديث التوكن السري للمستخدم"""
     new_token = secrets.token_urlsafe(24)
     try:
         with get_db() as conn:
@@ -107,7 +96,7 @@ def update_user_secret_token(user_id):
         return None
 
 def add_entity(user_id, entity_id, entity_name):
-    """إضافة قناة أو مجموعة للمستخدم"""
+    """ربط قناة أو مجموعة جديدة"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -123,7 +112,7 @@ def add_entity(user_id, entity_id, entity_name):
         return False
 
 def get_user_entities(user_id):
-    """جلب قنوات المستخدم"""
+    """جلب القنوات المرتبطة"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -133,10 +122,22 @@ def get_user_entities(user_id):
         logging.error(f"Error fetching entities: {e}")
         return []
 
-# --- 4. نظام التفعيل وتوليد الأكواد (إصلاح خطأ column days) ---
+def delete_entity(user_id, entity_id):
+    """حذف قناة مرتبطة"""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (str(user_id), str(entity_id)))
+                conn.commit()
+                return True
+    except Exception as e:
+        logging.error(f"Error deleting entity: {e}")
+        return False
+
+# --- 4. نظام التفعيل وتوليد الأكواد ---
 
 def add_subscription_code(code, days=30):
-    """إضافة كود جديد لقاعدة البيانات"""
+    """إضافة الكود الجاهز (المرسل من main.py) إلى قاعدة البيانات"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -145,13 +146,14 @@ def add_subscription_code(code, days=30):
                     (code, days)
                 )
                 conn.commit()
+                logging.info(f"✅ تم حفظ الكود بنجاح: {code}")
                 return True
     except Exception as e:
         logging.error(f"❌ Error in add_subscription_code: {e}")
         return False
 
 def activate_user_with_code(user_id, code):
-    """استخدام الكود لتفعيل اشتراك المستخدم"""
+    """تفعيل اشتراك المستخدم بعد التحقق من الكود"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -177,28 +179,3 @@ def activate_user_with_code(user_id, code):
     except Exception as e:
         logging.error(f"Error in activation: {e}")
         return False, "❌ حدث خطأ فني أثناء التفعيل."
-
-# --- 5. نظام التفعيل وتوليد الأكواد المطور ---
-
-def add_subscription_code(days=30):
-    """
-    توليد كود اشتراك فريد يبدأ بـ Smo- وحفظه في القاعدة
-    """
-    # توليد رمز عشوائي ودمجه مع البادئة المطلوبة
-    random_suffix = secrets.token_hex(4).upper() # توليد 8 رموز عشوائية
-    new_code = f"Smo-{random_suffix}"
-    
-    try:
-        with get_db() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "INSERT INTO activation_codes (code, days, is_used) VALUES (%s, %s, FALSE)",
-                    (new_code, days)
-                )
-                conn.commit()
-                logging.info(f"✅ تم توليد كود جديد: {new_code}")
-                return new_code # نرجع الكود لكي يتم عرضه للأدمن في تلجرام
-    except Exception as e:
-        logging.error(f"❌ Error in add_subscription_code: {e}")
-        return None
-
