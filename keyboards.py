@@ -13,11 +13,11 @@ def get_language_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 async def get_main_menu(uid, bot_username="bot"):
-    """القائمة الرئيسية للبوت بعد التحديث"""
+    """القائمة الرئيسية للبوت"""
     kb = [
         [
             InlineKeyboardButton("👤 حسابي", callback_data='acc'), 
-            InlineKeyboardButton("🔄 تجديد الاشتراك", callback_data='renew_sub') # تم إضافة الزر هنا
+            InlineKeyboardButton("🔄 تجديد الاشتراك", callback_data='renew_sub')
         ],
         [
             InlineKeyboardButton("📢 ربط قناة", callback_data='add_ch'),
@@ -62,35 +62,33 @@ def get_admin_main_keyboard():
     kb = [
         [InlineKeyboardButton("👥 قائمة المستخدمين", callback_data='admin_users')],
         [InlineKeyboardButton("📊 الإحصائيات", callback_data='admin_stats')],
-        [InlineKeyboardButton("🔑 توليد أكواد", callback_data='admin_generate_code')], # تم توحيد الـ callback
+        [InlineKeyboardButton("🔑 توليد أكواد", callback_data='admin_generate_code')],
         [InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data='home')]
     ]
     return InlineKeyboardMarkup(kb)
 
 def get_code_generation_keyboard():
-    """أزرار اختيار مدة الكود المراد توليده"""
-def get_code_generation_keyboard():
-    """أزرار اختيار مدة الكود المراد توليده للأدمن"""
+    """أزرار اختيار مدة الكود المراد توليده للأدمن (تم إصلاحها)"""
     kb = [
-        [InlineKeyboardButton("🎁 تجريبي (5 أيام)", callback_data='gen_days_5')], # الخيار الجديد
+        [InlineKeyboardButton("🎁 تجريبي (5 أيام)", callback_data='gen_days_5')],
         [InlineKeyboardButton("📅 شهر (30 يوم)", callback_data='gen_days_30')],
         [InlineKeyboardButton("📅 3 أشهر (90 يوم)", callback_data='gen_days_90')],
         [InlineKeyboardButton("📅 سنة (365 يوم)", callback_data='gen_days_365')],
         [InlineKeyboardButton("🔙 عودة للوحة الأدمن", callback_data='admin_panel')]
     ]
-    def get_entities_keyboard(entities):
-    """زر قنواتي: عرض القنوات مع معالجة خطأ البيانات"""
+    return InlineKeyboardMarkup(kb)
+
+def get_entities_keyboard(entities):
+    """زر قنواتي: عرض القنوات مع معالجة خطأ البيانات والمسافات"""
     keyboard = []
     
     for ent in entities:
         try:
-            # نحاول استخراج المعرف والاسم
-            # إذا كانت ent عبارة عن tuple أو list مثل (ID, Name)
+            # التأكد من استخراج المعرف والاسم بشكل صحيح
             if isinstance(ent, (tuple, list)) and len(ent) >= 2:
                 ent_id = ent[0]
                 ent_name = ent[1]
             else:
-                # إذا كانت البيانات تأتي بشكل مختلف (كقيمة مفردة مثلاً)
                 ent_id = ent
                 ent_name = "قناة/مجموعة"
 
@@ -102,3 +100,11 @@ def get_code_generation_keyboard():
     keyboard.append([InlineKeyboardButton("🏠 عودة للرئيسية", callback_data='home')])
     return InlineKeyboardMarkup(keyboard)
 
+def get_renewal_keyboard():
+    """واجهة تجديد الاشتراك"""
+    kb = [
+        [InlineKeyboardButton("📥 إدخال كود التفعيل", callback_data='renew_sub')],
+        [InlineKeyboardButton("💳 طلب كود / الدعم الفني", url=config.SUPPORT_LINK)],
+        [InlineKeyboardButton("🏠 عودة", callback_data='home')]
+    ]
+    return InlineKeyboardMarkup(kb)
