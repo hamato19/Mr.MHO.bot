@@ -106,3 +106,16 @@ def get_generation_menu():
 def get_back_to_admin():
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للوحة المالك", callback_data='adm')]])
+
+def get_all_users():
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                # نختار الأعمدة الموجودة فعلياً في جدولك (Neon)
+                cur.execute("SELECT user_id, is_activated, expiry_date FROM users ORDER BY created_at DESC LIMIT 50")
+                rows = cur.fetchall()
+                return rows # سيعود ببياناتك الحالية بدون أخطاء
+    except Exception as e:
+        print(f"❌ خطأ: {e}")
+        return []
+
