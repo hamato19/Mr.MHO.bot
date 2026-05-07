@@ -78,25 +78,26 @@ def get_code_generation_keyboard():
         [InlineKeyboardButton("📅 سنة (365 يوم)", callback_data='gen_days_365')],
         [InlineKeyboardButton("🔙 عودة للوحة الأدمن", callback_data='admin_panel')]
     ]
-    return InlineKeyboardMarkup(kb)
-
-
-def get_renewal_keyboard():
-    """لوحة مفاتيح تظهر للمستخدم عندما يكون اشتراكه منتهياً"""
-    kb = [
-        [InlineKeyboardButton("📥 إدخال كود التفعيل", callback_data='renew_sub')],
-        [InlineKeyboardButton("💳 طلب كود / الدعم الفني", url=config.SUPPORT_LINK)],
-        [InlineKeyboardButton("🏠  العودة للرئيسية", callback_data='home')]
-    ]
-    return InlineKeyboardMarkup(kb)
-
-def get_entities_keyboard(entities):
-    """توليد أزرار للقنوات المضافة مع خيار حذفها"""
+    def get_entities_keyboard(entities):
+    """زر قنواتي: عرض القنوات مع معالجة خطأ البيانات"""
     keyboard = []
+    
     for ent in entities:
-        # ent[0] هو المعرف (ID) و ent[1] هو اسم القناة أو اليوزرنيم
-        btn_text = f"❌ {ent[1]}"
-        keyboard.append([InlineKeyboardButton(btn_text, callback_data=f"del_ent_{ent[0]}")])
+        try:
+            # نحاول استخراج المعرف والاسم
+            # إذا كانت ent عبارة عن tuple أو list مثل (ID, Name)
+            if isinstance(ent, (tuple, list)) and len(ent) >= 2:
+                ent_id = ent[0]
+                ent_name = ent[1]
+            else:
+                # إذا كانت البيانات تأتي بشكل مختلف (كقيمة مفردة مثلاً)
+                ent_id = ent
+                ent_name = "قناة/مجموعة"
+
+            keyboard.append([InlineKeyboardButton(f"❌ {ent_name}", callback_data=f"del_ent_{ent_id}")])
+        except Exception as e:
+            print(f"Error processing entity: {e}")
+            continue
     
     keyboard.append([InlineKeyboardButton("🏠 عودة للرئيسية", callback_data='home')])
     return InlineKeyboardMarkup(keyboard)
