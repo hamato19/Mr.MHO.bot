@@ -69,13 +69,17 @@ def get_admin_main_keyboard():
 
 def get_code_generation_keyboard():
     """أزرار اختيار مدة الكود المراد توليده"""
+def get_code_generation_keyboard():
+    """أزرار اختيار مدة الكود المراد توليده للأدمن"""
     kb = [
+        [InlineKeyboardButton("🎁 تجريبي (5 أيام)", callback_data='gen_days_5')], # الخيار الجديد
         [InlineKeyboardButton("📅 شهر (30 يوم)", callback_data='gen_days_30')],
         [InlineKeyboardButton("📅 3 أشهر (90 يوم)", callback_data='gen_days_90')],
         [InlineKeyboardButton("📅 سنة (365 يوم)", callback_data='gen_days_365')],
-        [InlineKeyboardButton("🔙 عودة", callback_data='admin_panel')]
+        [InlineKeyboardButton("🔙 عودة للوحة الأدمن", callback_data='admin_panel')]
     ]
     return InlineKeyboardMarkup(kb)
+
 
 def get_renewal_keyboard():
     """لوحة مفاتيح تظهر للمستخدم عندما يكون اشتراكه منتهياً"""
