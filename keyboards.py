@@ -1,46 +1,62 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, KeyboardButtonRequestChat
 import config
 
+# --- 1. أزرار الحماية والخصوصية (إجبارية للمستخدم الجديد) ---
+
+def get_disclaimer_keyboard():
+    """أزرار الموافقة على الشروط والسياسة"""
+    keyboard = [
+        [InlineKeyboardButton("📜 عرض سياسة الخصوصية", callback_data='view_priv')],
+        [InlineKeyboardButton("✅ أوافق على الشروط والسياسة", callback_data='accept_tos')]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_subscription_options():
+    """خيارات الاشتراك تظهر بعد الموافقة مباشرة"""
+    keyboard = [
+        [InlineKeyboardButton("🎫 إدخال كود التفعيل", callback_data='ren')],
+        [InlineKeyboardButton("💳 الاشتراك الآن (تواصل مع الإدارة)", url=config.SUPPORT_LINK)]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_back_to_tos():
+    """العودة من عرض السياسة إلى خيار الموافقة"""
+    keyboard = [[InlineKeyboardButton("⬅️ العودة للموافقة", callback_data='back_tos')]]
+    return InlineKeyboardMarkup(keyboard)
+
+# --- 2. القوائم الرئيسية للمستخدم ---
+
 def get_back_home():
     """زر العودة الموحد"""
     return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة للرئيسية", callback_data='home')]])
 
 async def get_main_menu(uid, bot_username="bot"):
-    """القائمة الرئيسية"""
+    """القائمة الرئيسية للمشترك"""
     kb = [
-        [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🔄  تجديد الاشتراك", callback_data='ren')],
+        [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🔄 تجديد الاشتراك", callback_data='ren')],
         [InlineKeyboardButton("📢 اضافة قناة", callback_data='add_channel'), InlineKeyboardButton("حذف /قنواتي", callback_data='chs')],
-        [InlineKeyboardButton("🌐  رابط الويب هوك", callback_data='wh'), InlineKeyboardButton("🔄 توليد رمز امان جديد", callback_data='tok')],
+        [InlineKeyboardButton("🌐 رابط الويب هوك", callback_data='wh'), InlineKeyboardButton("🔄 توليد رمز امان جديد", callback_data='tok')],
         [InlineKeyboardButton("🤖 إضافة البوت كمشرف", url=f"https://t.me/{bot_username}?startchannel=true")],
         [InlineKeyboardButton("☎️ الدعم الفني", url=config.SUPPORT_LINK)]
     ]
-    # التأكد من مقارنة الأرقام بشكل صحيح
     if int(uid) == int(config.ADMIN_ID):
         kb.append([InlineKeyboardButton("👮 لوحة الأدمن", callback_data='adm')])
     return InlineKeyboardMarkup(kb)
 
 def get_entities_keyboard(entities):
-    """
-    عرض القنوات مع تجنب مشكلة الـ 64 بايت.
-    نستخدم معرف القناة (ID) المختصر أو الفهرس إذا كان الـ ID طويلاً جداً.
-    """
+    """عرض قائمة القنوات المرتبطة لحذفها"""
     keyboard = []
-    
     if entities:
         for entity in entities:
-            # بما أننا نستخدم RealDictCursor، البيانات تأتي كقاموس
             name = entity.get('entity_name') or "قناة"
             eid = entity.get('entity_id')
-            
-            # نرسل d_ متبوعة بالـ ID (معرف التلجرام عادة لا يتجاوز الحد المسموح)
             keyboard.append([InlineKeyboardButton(f"❌ {name}", callback_data=f"d_{eid}")])
-            
     keyboard.append([InlineKeyboardButton("➕ إضافة قناة جديدة", callback_data="add_channel")])
     keyboard.append([InlineKeyboardButton("🏠 عودة", callback_data='home')])
     return InlineKeyboardMarkup(keyboard)
 
 def get_request_channel_keyboard():
-    """كيبورد طلب اختيار القناة من القائمة (يظهر أسفل الشاشة)"""
+    """زر طلب القناة (Native Telegram UI)"""
     keyboard = [
         [
             KeyboardButton(
@@ -56,14 +72,31 @@ def get_request_channel_keyboard():
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
+# --- 3. لوحة تحكم الأدمن (توليد الأكواد بالمدد الزمنية) ---
+
 def get_admin_keyboard():
-    """لوحة تحكم الأدمن المحدثة"""
+    """لوحة تحكم الأدمن"""
     kb = [
         [
             InlineKeyboardButton("📊 الإحصائيات", callback_data='adm_s'),
             InlineKeyboardButton("👥 إدارة المستخدمين", callback_data='adm_u')
         ],
-        [InlineKeyboardButton("🔑 توليد أكواد تفعيل", callback_data='adm_g')],
+        [InlineKeyboardButton("🔑 توليد أكواد تفعيل", callback_data='adm_gen_menu')],
         [InlineKeyboardButton("🏠 العودة للرئيسية", callback_data='home')]
+    ]
+    return InlineKeyboardMarkup(kb)
+
+def get_generation_menu():
+    """قائمة اختيار مدة الكود المطلوب توليده"""
+    kb = [
+        [
+            InlineKeyboardButton("🗓️ 30 يوم", callback_data='gen_30'),
+            InlineKeyboardButton("🗓️ 60 يوم", callback_data='gen_60')
+        ],
+        [
+            InlineKeyboardButton("🗓️ 90 يوم", callback_data='gen_90'),
+            InlineKeyboardButton("🗓️ سنة كاملة", callback_data='gen_365')
+        ],
+        [InlineKeyboardButton("🔙 عودة للوحة الأدمن", callback_data='adm')]
     ]
     return InlineKeyboardMarkup(kb)
