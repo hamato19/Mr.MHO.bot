@@ -1,4 +1,3 @@
-# keyboards.py
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, KeyboardButtonRequestChat
 import config
 
@@ -7,7 +6,7 @@ def get_back_home():
     return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة للرئيسية", callback_data='home')]])
 
 async def get_main_menu(uid, bot_username="bot"):
-    """القائمة الرئيسية - تم تقصير callback_data لأقصى حد"""
+    """القائمة الرئيسية"""
     kb = [
         [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🔄 تجديد", callback_data='ren')],
         [InlineKeyboardButton("📢 ربط قناة", callback_data='add'), InlineKeyboardButton("📺 قنواتي", callback_data='chs')],
@@ -20,15 +19,23 @@ async def get_main_menu(uid, bot_username="bot"):
     return InlineKeyboardMarkup(kb)
 
 def get_entities_keyboard(entities):
-    """عرض القنوات - الحل الجذري لمشكلة الـ 64 بايت"""
+    """
+    حل مشكلة الـ 64 بايت (Button_data_invalid) نهائياً.
+    بدلاً من إرسال المعرف الطويل، نرسل رقم الترتيب (index).
+    """
     keyboard = []
-    for ent in entities:
+    
+    for index, ent in enumerate(entities):
         try:
-            eid = str(ent[0]) if isinstance(ent, (tuple, list)) else str(ent)
+            # استخراج اسم القناة
             name = str(ent[1]) if isinstance(ent, (tuple, list)) else "قناة"
-            # البادئة 'd_' توفر مساحة كافية جداً للمعرفات الطويلة
-            keyboard.append([InlineKeyboardButton(f"❌ {name}", callback_data=f"d_{eid}")])
-        except: continue
+            
+            # نرسل d_ متبوعة برقم الترتيب (مثل d_0, d_1)
+            # هذا يضمن أن حجم البيانات دائماً أقل من 5 بايت
+            keyboard.append([InlineKeyboardButton(f"❌ {name}", callback_data=f"d_{index}")])
+        except:
+            continue
+            
     keyboard.append([InlineKeyboardButton("🏠 عودة", callback_data='home')])
     return InlineKeyboardMarkup(keyboard)
 
