@@ -95,7 +95,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if int(uid) == int(config.ADMIN_ID):
             random_part = secrets.token_hex(4).upper()
             new_code = f"SMO-{random_part}"
-            
             if database.add_subscription_code(new_code, 30):
                 await query.message.reply_text(f"🎫 <b>تم توليد كود جديد:</b>\n<code>{new_code}</code>", parse_mode='HTML')
             else:
@@ -105,6 +104,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if int(uid) == int(config.ADMIN_ID):
             total_u, active_u, codes = database.get_admin_dashboard_stats()
             await query.edit_message_text(f"📊 <b>الإحصائيات:</b>\n\nالمسجلين: {total_u}\nالمشتركين: {active_u}\nالأكواد: {codes}", parse_mode='HTML', reply_markup=keyboards.get_back_home())
+
+    elif data == 'adm_u': # إدارة المستخدمين
+        if int(uid) == int(config.ADMIN_ID):
+            users = database.get_all_users()
+            if not users:
+                await query.edit_message_text("∅ لا يوجد مستخدمين مسجلين بعد.", reply_markup=keyboards.get_back_home())
+                return
+            users_list = "👥 <b>قائمة آخر 20 مستخدم:</b>\n\n"
+            for u in users:
+                status = "✅" if u['is_activated'] else "❌"
+                users_list += f"{status} <code>{u['user_id']}</code>\n"
+            await query.edit_message_text(users_list, parse_mode='HTML', reply_markup=keyboards.get_back_home())
 
     elif data.startswith('d_'): # حذف قناة
         target_id = data.replace('d_', '')
@@ -117,7 +128,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
-    # معالجة القنوات المشتركة (Chat Shared)
     if update.message.chat_shared:
         channel_id = update.message.chat_shared.chat_id
         try:
@@ -130,7 +140,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ خطأ، تأكد أن البوت مشرف في القناة.", reply_markup=ReplyKeyboardRemove())
         return
 
-    # معالجة إدخال كود التفعيل
     if context.user_data.get('awaiting_code'):
         success, msg = database.activate_user_with_code(uid, update.message.text.strip())
         context.user_data['awaiting_code'] = False
@@ -142,12 +151,10 @@ async def main():
     database.init_db()
     app = Application.builder().token(config.BOT_TOKEN).connect_timeout(30).build()
     
-    # إضافة المعالجات
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
-    # تشغيل المهام الجانبية
     asyncio.create_task(web_server.start_server())
     asyncio.create_task(services.keep_alive())
     
