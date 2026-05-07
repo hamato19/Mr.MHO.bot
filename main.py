@@ -127,24 +127,74 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ents = database.get_user_entities(uid)
             await query.edit_message_text("📋 القنوات المتبقية:", reply_markup=keyboards.get_entities_keyboard(ents))
 
-    # --- لوحة التحكم للمالك (توليد الأكواد) ---
+    #     # --- لوحة التحكم للمالك (تفعيل كامل لجميع الأزرار) ---
     elif is_owner:
+        # 1. القائمة الرئيسية للوحة التحكم
         if data == 'adm':
             t, a, c = database.get_admin_dashboard_stats()
-            await query.edit_message_text(f"👮 <b>لوحة التحكم للمالك</b>\n\n👥 الكل: {t} | ✅ المشتركين: {a}\n🎫 أكواد لم تفعل: {c}", parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
+            await query.edit_message_text(
+                f"👮 <b>لوحة التحكم للمالك</b>\n\n"
+                f"👥 إجمالي المستخدمين: {t}\n"
+                f"✅ المشتركين النشطين: {a}\n"
+                f"🎫 أكواد لم تُفعل: {c}", 
+                parse_mode='HTML', 
+                reply_markup=keyboards.get_admin_keyboard()
+            )
         
+        # 2. زر إدارة المستخدمين (تمت إضافته)
+   elif data == 'adm_u':
+            users = database.get_all_users() # جلب القائمة من قاعدة البيانات
+            if not users:
+                await query.answer("📋 لا يوجد مستخدمين مسجلين حالياً.", show_alert=True)
+            else:
+                await query.edit_message_text(
+                    "👥 <b>إدارة المستخدمين:</b>\nاختر مستخدماً لعرض بياناته أو إدارته:",
+                    parse_mode='HTML',
+                    reply_markup=keyboards.get_users_management_keyboard(users)
+                )
+
+        # 3. زر الإحصائيات التفصيلية (تمت إضافته)
+     elif data == 'adm_s':
+            t, a, c = database.get_admin_dashboard_stats()
+            # يمكنك هنا عرض تفاصيل أكثر مثل (المحظورين، اشتراكات منتهية، إلخ)
+            stats_text = (
+                "📊 <b>إحصائيات المنظومة الشاملة:</b>\n\n"
+                f"• عدد المستخدمين: {t}\n"
+                f"• الاشتراكات النشطة: {a}\n"
+                f"• الأكواد المتوفرة: {c}\n"
+                f"• حالة الخادم: متصل ✅"
+            )
+            await query.edit_message_text(stats_text, parse_mode='HTML', reply_markup=keyboards.get_back_to_admin())
+
+        # 4. قائمة توليد الأكواد
         elif data == 'adm_gen_menu':
-            await query.edit_message_text("🗓️ <b>توليد كود اشتراك جديد:</b>\nاختر المدة المطلوبة:", reply_markup=keyboards.get_generation_menu())
+            await query.edit_message_text(
+                "🗓️ <b>توليد كود اشتراك جديد:</b>\nاختر المدة المطلوبة:", 
+                parse_mode='HTML', 
+                reply_markup=keyboards.get_generation_menu()
+            )
             
-        elif data.startswith('gen_'): # معالج توليد الكود التلقائي
+        # 5. معالج توليد الكود التلقائي (عند اختيار المدة)
+        elif data.startswith('gen_'):
             days = int(data.split('_')[1])
             new_code = f"SMO-{secrets.token_hex(4).upper()}"
             if database.add_subscription_code(new_code, days):
-                # إرسال الكود في رسالة جديدة لسهولة النسخ
-                await query.message.reply_text(f"🎫 <b>تم إنشاء كود جديد:</b>\n<code>{new_code}</code>\nالصلاحية: {days} يوم", parse_mode='HTML')
-                # العودة للوحة الأدمن
+                # إرسال الكود للمالك في رسالة مستقلة ليسهل نسخها ونشرها
+                await query.message.reply_text(
+                    f"🎫 <b>تم إنشاء كود جديد بنجاح:</b>\n\n"
+                    f"<code>{new_code}</code>\n"
+                    f"📅 الصلاحية: {days} يوم", 
+                    parse_mode='HTML'
+                )
+                # تحديث لوحة الأدمن لتعكس التغيير في عدد الأكواد
                 t, a, c = database.get_admin_dashboard_stats()
-                await query.edit_message_text(f"👮 لوحة المالك\n✅ تم التوليد بنجاح.\n🎫 الأكواد المتوفرة: {c}", reply_markup=keyboards.get_admin_keyboard())
+                await query.edit_message_text(
+                    f"👮 <b>لوحة المالك</b>\n✅ تم التوليد بنجاح.\n🎫 الأكواد المتوفرة حالياً: {c}", 
+                    parse_mode='HTML',
+                    reply_markup=keyboards.get_admin_keyboard()
+                )
+
+    
 
 # --- 3. معالجة الرسائل وربط نظام الحماية (Security) ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
