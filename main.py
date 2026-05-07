@@ -8,7 +8,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 import config
 import database
 import services
-import keyboards  # التأكد من استيراد ملف الكيبورد
+import keyboards  # التأكد من استيراد ملف الكيبورد المحدث
 import web_server
 
 # إعداد السجلات
@@ -23,7 +23,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     services.initialize_user(uid)
     
     bot_info = await context.bot.get_me()
-    # استخدام القائمة الرئيسية المحدثة
     markup = await keyboards.get_main_menu(uid, bot_info.username)
     
     welcome_text = (
@@ -103,14 +102,29 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("⚠️ عذراً، هذه الصلاحية للمالك فقط.", show_alert=True)
 
-    # --- حذف القنوات (البادئة d_ متوافقة مع keyboards.py الجديد) ---
+    # --- حذف القنوات (البادئة d_ متوافقة مع نظام الفهرسة في keyboards.py) ---
     elif data.startswith('d_'):
-        target_id = data.replace('d_', '')
-        # services.delete_entity(uid, target_id) # تفعيل الدالة عند جاهزية ملف services
-        await query.answer(f"تم حذف الربط بنجاح", show_alert=True)
-        # إعادة جلب القنوات المحدثة
-        entities = services.get_user_entities(uid)
-        await query.edit_message_reply_markup(reply_markup=keyboards.get_entities_keyboard(entities))
+        try:
+            index = int(data.replace('d_', ''))
+            entities = services.get_user_entities(uid)
+            
+            if 0 <= index < len(entities):
+                target_entity = entities[index]
+                target_id = target_entity[0] # المعرف الحقيقي
+                
+                # استدعاء دالة الحذف الفعلية
+                services.delete_entity(uid, target_id) 
+                
+                await query.answer(f"✅ تم حذف: {target_entity[1]}", show_alert=True)
+            else:
+                await query.answer("⚠️ القناة غير موجودة")
+        except Exception as e:
+            logger.error(f"Error in delete: {e}")
+            await query.answer("⚠️ حدث خطأ أثناء الحذف")
+            
+        # تحديث القائمة فوراً بعد الحذف
+        new_entities = services.get_user_entities(uid)
+        await query.edit_message_reply_markup(reply_markup=keyboards.get_entities_keyboard(new_entities))
 
 # --- 3. معالج الرسائل ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
