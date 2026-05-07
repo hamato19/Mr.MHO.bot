@@ -8,10 +8,10 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 import config
 import database
 import services
-import keyboards
+import keyboards  # التأكد من استيراد ملف الكيبورد
 import web_server
 
-# إعداد السجلات لمراقبة أداء السيرفر في Render
+# إعداد السجلات
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
@@ -22,10 +22,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     services.initialize_user(uid)
     
-    # جلب معلومات البوت لتوليد رابط "إضافة كأدمن"
     bot_info = await context.bot.get_me()
-    
-    # استدعاء المنيو الرئيسي (لاحظ استخدام await لأن الدالة async)
+    # استخدام القائمة الرئيسية المحدثة
     markup = await keyboards.get_main_menu(uid, bot_info.username)
     
     welcome_text = (
@@ -48,10 +46,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.answer()
 
+    # --- القائمة الرئيسية (home) ---
+    if data == 'home':
+        bot_info = await context.bot.get_me()
+        markup = await keyboards.get_main_menu(uid, bot_info.username)
+        await query.edit_message_text("🏠 <b>القائمة الرئيسية:</b>", parse_mode='HTML', reply_markup=markup)
+
     # --- روابط الويب هوك (wh) ---
-    if data == 'wh':
+    elif data == 'wh':
         msg_text = services.format_webhook_links(uid)
-        await query.edit_message_text(msg_text, parse_mode='HTML', reply_markup=keyboards.get_back_to_home())
+        await query.edit_message_text(msg_text, parse_mode='HTML', reply_markup=keyboards.get_back_home())
 
     # --- تحديث الرمز (tok) ---
     elif data == 'tok':
@@ -61,7 +65,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             f"✅ <b>تم تحديث رمز الأمان بنجاح!</b>\n\n{msg_text}",
             parse_mode='HTML',
-            reply_markup=keyboards.get_back_to_home()
+            reply_markup=keyboards.get_back_home()
         )
 
     # --- حسابي (acc) ---
@@ -74,10 +78,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"👤 <b>بيانات حسابك:</b>\n\n"
                 f"🆔 معرفك: <code>{uid}</code>\n"
                 f"🚦 الحالة: {status}\n"
-                f"⏳ المتبقي: {expiry}\n"
-                f"🔑 الرمز الحالي: <code>{user.get('secret_token')}</code>"
+                f"⏳ المتبقي: {expiry}"
             )
-            await query.edit_message_text(acc_text, parse_mode='HTML', reply_markup=keyboards.get_back_to_home())
+            await query.edit_message_text(acc_text, parse_mode='HTML', reply_markup=keyboards.get_back_home())
 
     # --- قنواتي (chs) ---
     elif data == 'chs':
@@ -89,28 +92,23 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'ren':
         await query.edit_message_text(
             "📩 من فضلك أرسل كود التفعيل الآن في رسالة نصية:",
-            reply_markup=keyboards.get_back_to_home()
+            reply_markup=keyboards.get_back_home()
         )
         context.user_data['awaiting_code'] = True
 
     # --- لوحة التحكم للأدمن (adm) ---
     elif data == 'adm':
         if int(uid) == config.ADMIN_ID:
-            await query.edit_message_text("👮 <b>لوحة تحكم الأدمن</b>", parse_mode='HTML', reply_markup=keyboards.get_admin_main_keyboard())
+            await query.edit_message_text("👮 <b>لوحة تحكم الأدمن</b>", parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
         else:
             await query.answer("⚠️ عذراً، هذه الصلاحية للمالك فقط.", show_alert=True)
 
-    # --- العودة للقائمة الرئيسية (home) ---
-    elif data == 'home':
-        bot_info = await context.bot.get_me()
-        markup = await keyboards.get_main_menu(uid, bot_info.username)
-        await query.edit_message_text("🏠 <b>القائمة الرئيسية:</b>", parse_mode='HTML', reply_markup=markup)
-
-    # --- حذف القنوات المختصر (dl_) ---
-    elif data.startswith('dl_'):
-        target_id = data.replace('dl_', '')
+    # --- حذف القنوات (البادئة d_ متوافقة مع keyboards.py الجديد) ---
+    elif data.startswith('d_'):
+        target_id = data.replace('d_', '')
         # services.delete_entity(uid, target_id) # تفعيل الدالة عند جاهزية ملف services
-        await query.answer(f"تم طلب حذف المعرف: {target_id}", show_alert=True)
+        await query.answer(f"تم حذف الربط بنجاح", show_alert=True)
+        # إعادة جلب القنوات المحدثة
         entities = services.get_user_entities(uid)
         await query.edit_message_reply_markup(reply_markup=keyboards.get_entities_keyboard(entities))
 
@@ -133,7 +131,6 @@ async def main():
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # تشغيل سيرفر استقبال الإشارات والـ Keep Alive
     asyncio.create_task(web_server.start_server())
     asyncio.create_task(services.keep_alive())
 
