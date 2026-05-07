@@ -6,7 +6,7 @@ from database import get_db
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def initialize_database():
-    """إنشاء الجداول الأساسية إذا لم تكن موجودة"""
+    """إنشاء الجداول الأساسية إذا لم تكن موجودة في Neon DB"""
     
     # استعلامات إنشاء الجداول
     commands = (
@@ -24,6 +24,7 @@ def initialize_database():
             id SERIAL PRIMARY KEY,
             user_id VARCHAR(50) REFERENCES users(user_id) ON DELETE CASCADE,
             entity_id VARCHAR(100) NOT NULL,
+            entity_name TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(user_id, entity_id)
         )
@@ -40,22 +41,22 @@ def initialize_database():
         """
     )
 
-    conn = None
     try:
-        conn = get_db()
-        with conn.cursor() as cur:
-            # تنفيذ كل أمر إنشاء
-            for command in commands:
-                cur.execute(command)
-            
-            conn.commit()
-            logging.info("✅ تم تهيئة قاعدة البيانات بنجاح (الجداول جاهزة).")
+        # استخدام with لفتح مدير السياق (Context Manager) بشكل صحيح
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                # تنفيذ كل أمر إنشاء جداول
+                for command in commands:
+                    cur.execute(command)
+                
+                # التأكد من وجود عمود الاسم (للمشاريع القديمة)
+                cur.execute("ALTER TABLE entities ADD COLUMN IF NOT EXISTS entity_name TEXT;")
+                
+                conn.commit()
+                logging.info("✅ تم تهيئة قاعدة البيانات بنجاح (الجداول جاهزة).")
             
     except Exception as e:
         logging.error(f"❌ خطأ أثناء تهيئة قاعدة البيانات: {e}")
-    finally:
-        if conn:
-            conn.close()
 
 if __name__ == "__main__":
     # تشغيل التهيئة عند استدعاء الملف مباشرة
