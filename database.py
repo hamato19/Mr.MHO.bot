@@ -3,12 +3,21 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 import config
 import logging
+from contextlib import contextmanager
 
+@contextmanager
 def get_db():
-    """إنشاء اتصال بقاعدة البيانات باستخدام الرابط الموحد"""
+    """إنشاء اتصال بقاعدة البيانات مع ضمان الإغلاق التلقائي"""
+    conn = None
     try:
+        # الاتصال باستخدام رابط Neon المخزن في config
         conn = psycopg2.connect(config.DATABASE_URL, sslmode='require')
-        return conn
+        yield conn
     except Exception as e:
-        logging.error(f"❌ فشل الاتصال بقاعدة البيانات: {e}")
-        return None
+        logging.error(f"❌ خطأ في قاعدة البيانات: {e}")
+        if conn:
+            conn.rollback()
+        raise e
+    finally:
+        if conn:
+            conn.close()
