@@ -4,10 +4,13 @@ import config
 # --- 1. أزرار الحماية والخصوصية (إجبارية للمستخدم الجديد) ---
 
 def get_disclaimer_keyboard():
-    """أزرار الموافقة على الشروط والسياسة"""
+    """أزرار الموافقة على الشروط والسياسة مع خيار الرفض"""
     keyboard = [
         [InlineKeyboardButton("📜 عرض سياسة الخصوصية", callback_data='view_priv')],
-        [InlineKeyboardButton("✅ أوافق على الشروط والسياسة", callback_data='accept_tos')]
+        [
+            InlineKeyboardButton("✅ أوافق", callback_data='accept_tos'),
+            InlineKeyboardButton("❌ لا أوافق", callback_data='reject_tos')
+        ]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -20,7 +23,7 @@ def get_subscription_options():
     return InlineKeyboardMarkup(keyboard)
 
 def get_back_to_tos():
-    """العودة من عرض السياسة إلى خيار الموافقة"""
+    """العودة من عرض السياسة إلى خيار الموافقة والرفض"""
     keyboard = [[InlineKeyboardButton("⬅️ العودة للموافقة", callback_data='back_tos')]]
     return InlineKeyboardMarkup(keyboard)
 
