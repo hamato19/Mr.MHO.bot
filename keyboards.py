@@ -76,3 +76,13 @@ def get_code_generation_keyboard():
         [InlineKeyboardButton("🔙 عودة", callback_data='admin_panel')]
     ]
     return InlineKeyboardMarkup(kb)
+
+def get_renewal_keyboard():
+    """لوحة مفاتيح تظهر للمستخدم عندما يكون اشتراكه منتهياً"""
+    kb = [
+        [InlineKeyboardButton("📥 إدخال كود التفعيل", callback_data='renew_sub')],
+        [InlineKeyboardButton("💳 طلب كود / الدعم الفني", url=config.SUPPORT_LINK)],
+        [InlineKeyboardButton("🏠  العودة للرئيسية", callback_data='home')]
+    ]
+    return InlineKeyboardMarkup(kb)
+
