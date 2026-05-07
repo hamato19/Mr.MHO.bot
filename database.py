@@ -6,7 +6,7 @@ import secrets
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
-# إعدادات التسجيل
+# إعدادات التسجيل لمتابعة العمليات على السيرفر
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @contextmanager
@@ -14,6 +14,7 @@ def get_db():
     """إنشاء اتصال بقاعدة البيانات مع ضمان الإغلاق التلقائي"""
     conn = None
     try:
+        # الاتصال باستخدام الرابط المخزن في ملف الإعدادات (Neon DB)
         conn = psycopg2.connect(config.DATABASE_URL, sslmode='require')
         yield conn
     except Exception as e:
@@ -26,22 +27,30 @@ def get_db():
             if not conn.closed:
                 conn.close()
 
-# --- 1. دوال إدارة المستخدمين (Admin & General) ---
+# --- 1. دوال التهيئة (Initialization) ---
+
+def init_db():
+    """دالة لتهيئة الجداول، تستدعى عند بدء تشغيل main.py"""
+    try:
+        from init_db import initialize_database
+        initialize_database()
+        logging.info("✅ تم استدعاء تهيئة قاعدة البيانات بنجاح.")
+    except Exception as e:
+        logging.error(f"❌ فشل في تهيئة الجداول: {e}")
+
+# --- 2. دوال إدارة المستخدمين (Users Management) ---
 
 def get_admin_dashboard_stats():
     """جلب إحصائيات لوحة التحكم للأدمن"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
-                # إجمالي المستخدمين
                 cur.execute("SELECT COUNT(*) FROM users")
                 total_users = cur.fetchone()[0]
                 
-                # المستخدمين المفعلين
                 cur.execute("SELECT COUNT(*) FROM users WHERE is_activated = TRUE")
                 active_users = cur.fetchone()[0]
                 
-                # الأكواد المتاحة
                 cur.execute("SELECT COUNT(*) FROM activation_codes WHERE is_used = FALSE")
                 available_codes = cur.fetchone()[0]
                 
@@ -51,7 +60,7 @@ def get_admin_dashboard_stats():
         return 0, 0, 0
 
 def register_user_if_not_exists(user_id):
-    """تسجيل مستخدم جديد إذا لم يكن موجوداً مع توليد توكن سري تلقائي"""
+    """تسجيل مستخدم جديد تلقائياً عند أول تواصل"""
     secret_token = secrets.token_urlsafe(24)
     try:
         with get_db() as conn:
@@ -66,7 +75,7 @@ def register_user_if_not_exists(user_id):
         logging.error(f"Error registering user: {e}")
 
 def get_user_profile(user_id):
-    """جلب بيانات حساب المستخدم (لزر حسابي)"""
+    """جلب بيانات حساب المستخدم بالكامل"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -76,10 +85,10 @@ def get_user_profile(user_id):
         logging.error(f"Error fetching profile: {e}")
         return None
 
-# --- 2. دوال الرموز والويب هوك (Webhook & Tokens) ---
+# --- 3. إدارة الرموز والويب هوك (Tokens) ---
 
 def update_user_secret_token(user_id):
-    """توليد رمز جديد (لزر توليد رمز جديد)"""
+    """تحديث التوكن السري للمستخدم (عند طلب توليد رمز جديد)"""
     new_token = secrets.token_urlsafe(24)
     try:
         with get_db() as conn:
@@ -91,10 +100,10 @@ def update_user_secret_token(user_id):
         logging.error(f"Error updating token: {e}")
         return None
 
-# --- 3. دوال إدارة الكيانات (Entities/Channels) ---
+# --- 4. إدارة القنوات والمجموعات (Entities) ---
 
 def add_entity(user_id, entity_id, entity_name):
-    """ربط قناة أو مجموعة جديدة"""
+    """ربط قناة أو مجموعة جديدة لقائمة المستخدم"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -110,7 +119,7 @@ def add_entity(user_id, entity_id, entity_name):
         return False
 
 def get_user_entities(user_id):
-    """جلب كافة الكيانات المربوطة بمستخدم معين"""
+    """جلب كافة القنوات المرتبطة بالمستخدم"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -120,10 +129,22 @@ def get_user_entities(user_id):
         logging.error(f"Error fetching entities: {e}")
         return []
 
-# --- 4. نظام التفعيل (Activation System) ---
+def delete_entity(user_id, entity_id):
+    """حذف قناة مرتبطة"""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM entities WHERE user_id = %s AND entity_id = %s", (str(user_id), str(entity_id)))
+                conn.commit()
+                return True
+    except Exception as e:
+        logging.error(f"Error deleting entity: {e}")
+        return False
+
+# --- 5. نظام التفعيل (Activation) ---
 
 def create_activation_code(code, days):
-    """إنشاء كود تفعيل جديد (خاص بالأدمن)"""
+    """إنشاء كود تفعيل جديد من قبل الأدمن"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -135,21 +156,19 @@ def create_activation_code(code, days):
         return False
 
 def activate_user_with_code(user_id, code):
-    """تفعيل اشتراك المستخدم باستخدام كود"""
+    """تفعيل اشتراك المستخدم بعد التحقق من الكود"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # التأكد من صحة الكود
                 cur.execute("SELECT * FROM activation_codes WHERE code = %s AND is_used = FALSE", (code,))
                 code_data = cur.fetchone()
                 
                 if not code_data:
-                    return False, "الكود غير صالح أو مستخدم مسبقاً."
+                    return False, "⚠️ الكود غير صالح أو مستخدم مسبقاً."
                 
                 days = code_data['days']
                 expiry_date = datetime.now() + timedelta(days=days)
                 
-                # تحديث المستخدم وتحديد الكود كمستخدم
                 cur.execute("""
                     UPDATE users 
                     SET is_activated = TRUE, expiry_date = %s 
@@ -159,8 +178,7 @@ def activate_user_with_code(user_id, code):
                 cur.execute("UPDATE activation_codes SET is_used = TRUE, used_by = %s WHERE code = %s", (str(user_id), code))
                 
                 conn.commit()
-                return True, f"تم التفعيل بنجاح لمدة {days} يوم."
+                return True, f"✅ تم التفعيل بنجاح لمدة {days} يوم."
     except Exception as e:
         logging.error(f"Error in activation: {e}")
-        return False, "حدث خطأ فني أثناء التفعيل."
-
+        return False, "❌ حدث خطأ فني أثناء التفعيل."
