@@ -11,7 +11,7 @@ import services
 import keyboards
 import web_server
 
-# إعداد السجلات
+# إعداد السجلات لمراقبة أداء السيرفر في Render
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
@@ -22,10 +22,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     services.initialize_user(uid)
     
-    # جلب يوزر البوت تلقائياً لرابط إضافة المشرف
+    # جلب معلومات البوت لتوليد رابط "إضافة كأدمن"
     bot_info = await context.bot.get_me()
     
-    # استخدام الدالة async من ملف keyboards.py الجديد
+    # استدعاء المنيو الرئيسي (لاحظ استخدام await لأن الدالة async)
     markup = await keyboards.get_main_menu(uid, bot_info.username)
     
     welcome_text = (
@@ -40,7 +40,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=markup
     )
 
-# --- 2. معالج الأزرار التفاعلية (تم تحديث الـ Callback لتطابق الكيبورد الجديد) ---
+# --- 2. معالج الأزرار التفاعلية (Callbacks) ---
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
@@ -48,13 +48,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.answer()
 
-    # --- روابط الويب هوك (view_wh) ---
-    if data == 'view_wh':
+    # --- روابط الويب هوك (wh) ---
+    if data == 'wh':
         msg_text = services.format_webhook_links(uid)
         await query.edit_message_text(msg_text, parse_mode='HTML', reply_markup=keyboards.get_back_to_home())
 
-    # --- تحديث الرمز (gen_token) ---
-    elif data == 'gen_token':
+    # --- تحديث الرمز (tok) ---
+    elif data == 'tok':
         new_token = secrets.token_hex(8)
         services.update_user_token(uid, new_token)
         msg_text = services.format_webhook_links(uid)
@@ -79,22 +79,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await query.edit_message_text(acc_text, parse_mode='HTML', reply_markup=keyboards.get_back_to_home())
 
-    # --- قنواتي (view_chs) ---
-    elif data == 'view_chs':
+    # --- قنواتي (chs) ---
+    elif data == 'chs':
         entities = services.get_user_entities(uid)
         markup = keyboards.get_entities_keyboard(entities)
         await query.edit_message_text("📺 <b>قنواتك المرتبطة:</b>\n(اضغط على اسم القناة لحذف الربط)", parse_mode='HTML', reply_markup=markup)
 
-    # --- تجديد الاشتراك / إدخال كود (renew_sub) ---
-    elif data == 'renew_sub':
+    # --- تجديد الاشتراك / إدخال كود (ren) ---
+    elif data == 'ren':
         await query.edit_message_text(
             "📩 من فضلك أرسل كود التفعيل الآن في رسالة نصية:",
             reply_markup=keyboards.get_back_to_home()
         )
         context.user_data['awaiting_code'] = True
 
-    # --- لوحة التحكم للأدمن (admin_panel) ---
-    elif data == 'admin_panel':
+    # --- لوحة التحكم للأدمن (adm) ---
+    elif data == 'adm':
         if int(uid) == config.ADMIN_ID:
             await query.edit_message_text("👮 <b>لوحة تحكم الأدمن</b>", parse_mode='HTML', reply_markup=keyboards.get_admin_main_keyboard())
         else:
@@ -106,19 +106,25 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         markup = await keyboards.get_main_menu(uid, bot_info.username)
         await query.edit_message_text("🏠 <b>القائمة الرئيسية:</b>", parse_mode='HTML', reply_markup=markup)
 
+    # --- حذف القنوات المختصر (dl_) ---
+    elif data.startswith('dl_'):
+        target_id = data.replace('dl_', '')
+        # services.delete_entity(uid, target_id) # تفعيل الدالة عند جاهزية ملف services
+        await query.answer(f"تم طلب حذف المعرف: {target_id}", show_alert=True)
+        entities = services.get_user_entities(uid)
+        await query.edit_message_reply_markup(reply_markup=keyboards.get_entities_keyboard(entities))
+
 # --- 3. معالج الرسائل ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if context.user_data.get('awaiting_code'):
         success, message = services.redeem_code(uid, update.message.text)
         context.user_data['awaiting_code'] = False
-        # جلب بيانات المستخدم المحدثة لعرض المنيو
-        user = services.get_user_data(uid)
         bot_info = await context.bot.get_me()
         markup = await keyboards.get_main_menu(uid, bot_info.username)
         await update.message.reply_text(message, reply_markup=markup)
 
-# --- 4. تشغيل المنظومة ---
+# --- 4. الدالة الرئيسية لتشغيل المنظومة ---
 async def main():
     database.init_db()
     application = Application.builder().token(config.BOT_TOKEN).build()
@@ -127,10 +133,11 @@ async def main():
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    # تشغيل سيرفر استقبال الإشارات والـ Keep Alive
     asyncio.create_task(web_server.start_server())
     asyncio.create_task(services.keep_alive())
 
-    logger.info("🚀 النظام يعمل الآن بكامل خصائصه...")
+    logger.info("🚀 نظام سمو الأرقام يعمل الآن بكامل خصائصه...")
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
