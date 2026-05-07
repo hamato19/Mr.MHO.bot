@@ -6,19 +6,21 @@ from database import get_db
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def initialize_database():
-    """إنشاء الجداول الأساسية إذا لم تكن موجودة في Neon DB"""
+    """إنشاء الجداول الأساسية وتحديث الهيكل في Neon DB"""
     
-    # استعلامات إنشاء الجداول
     commands = (
+        # جدول المستخدمين مع إضافة عمود اللغة
         """
         CREATE TABLE IF NOT EXISTS users (
             user_id VARCHAR(50) PRIMARY KEY,
             secret_token VARCHAR(64) UNIQUE NOT NULL,
             is_activated BOOLEAN DEFAULT FALSE,
             expiry_date TIMESTAMP,
+            language VARCHAR(5) DEFAULT 'ar',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
         """,
+        # جدول القنوات المرتبطة
         """
         CREATE TABLE IF NOT EXISTS entities (
             id SERIAL PRIMARY KEY,
@@ -29,6 +31,7 @@ def initialize_database():
             UNIQUE(user_id, entity_id)
         )
         """,
+        # جدول أكواد التفعيل
         """
         CREATE TABLE IF NOT EXISTS activation_codes (
             id SERIAL PRIMARY KEY,
@@ -42,22 +45,24 @@ def initialize_database():
     )
 
     try:
-        # استخدام with لفتح مدير السياق (Context Manager) بشكل صحيح
         with get_db() as conn:
             with conn.cursor() as cur:
-                # تنفيذ كل أمر إنشاء جداول
+                # تنفيذ أوامر الإنشاء
                 for command in commands:
                     cur.execute(command)
                 
-                # التأكد من وجود عمود الاسم (للمشاريع القديمة)
+                # --- تحديثات الهيكل للمشاريع القائمة ---
+                # التأكد من وجود عمود اسم القناة
                 cur.execute("ALTER TABLE entities ADD COLUMN IF NOT EXISTS entity_name TEXT;")
                 
+                # التأكد من وجود عمود اللغة في جدول المستخدمين
+                cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS language VARCHAR(5) DEFAULT 'ar';")
+                
                 conn.commit()
-                logging.info("✅ تم تهيئة قاعدة البيانات بنجاح (الجداول جاهزة).")
+                logging.info("✅ تم تهيئة قاعدة البيانات وتحديث الأعمدة بنجاح.")
             
     except Exception as e:
         logging.error(f"❌ خطأ أثناء تهيئة قاعدة البيانات: {e}")
 
 if __name__ == "__main__":
-    # تشغيل التهيئة عند استدعاء الملف مباشرة
     initialize_database()
