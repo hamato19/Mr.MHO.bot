@@ -1,6 +1,7 @@
 import logging
 import asyncio
 import secrets
+import telegram
 from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 # --- 1. الدالة الرئيسية /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    database.register_user_if_not_exists(uid) # التأكد من تسجيله في NeonDB
+    database.register_user_if_not_exists(uid)
     
     bot_info = await context.bot.get_me()
     markup = await keyboards.get_main_menu(uid, bot_info.username)
@@ -37,13 +38,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=markup
     )
 
-# --- 2. معالج الأزرار (Callbacks) ---
+# --- 2. معالج الأزرار المصلح (Callbacks) ---
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
     uid = update.effective_user.id
     
-    await query.answer()
+    # محاولة إجابة التنبيه لتجنب تعليق الزر
+    try:
+        await query.answer()
+    except:
+        pass
 
     if data == 'home':
         bot_info = await context.bot.get_me()
@@ -67,7 +72,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = database.get_user_profile(uid)
         if user:
             status = "✅ مفعل" if user.get('is_activated') else "❌ غير مفعل"
-            # دالة حساب الوقت المتبقي من ملف services
             expiry = services.get_time_remaining(user.get('expiry_date'))
             acc_text = (
                 f"👤 <b>بيانات حسابك:</b>\n\n"
@@ -80,12 +84,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'chs':
         entities = database.get_user_entities(uid)
         markup = keyboards.get_entities_keyboard(entities)
-        await query.edit_message_text("📺 <b>قنواتك المرتبطة:</b>\n\nاضغط على اسم القناة لحذفها، أو استخدم زر الإضافة بالأسفل.", parse_mode='HTML', reply_markup=markup)
+        try:
+            await query.edit_message_text("📺 <b>قنواتك المرتبطة:</b>\n\nاضغط على اسم القناة لحذفها، أو استخدم زر الإضافة بالأسفل.", parse_mode='HTML', reply_markup=markup)
+        except telegram.error.BadRequest:
+            pass
 
-    elif data == 'add_channel':
-        # استخدام الكيبورد الذي يفتح قائمة القنوات مباشرة
-        await query.message.reply_text(
-            "👇 اضغط على الزر بالأسفل لاختيار القناة من حسابك مباشرة:",
+    elif data == 'add_channel': # تأكد أن هذا الاسم مطابق للزر في keyboards.py
+        # نقوم بإرسال رسالة جديدة لأن ReplyKeyboardMarkup لا يظهر مع تعديل الرسالة
+        await context.bot.send_message(
+            chat_id=uid,
+            text="👇 اضغط على الزر بالأسفل لاختيار القناة من حسابك مباشرة:",
             reply_markup=keyboards.get_request_channel_keyboard()
         )
 
@@ -97,7 +105,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['awaiting_code'] = True
 
     elif data == 'adm':
-        if int(uid) == config.ADMIN_ID:
+        # الإصلاح الحاسم: تحويل الطرفين لـ int لضمان نجاح المقارنة
+        if int(uid) == int(config.ADMIN_ID):
             total_u, active_u, codes = database.get_admin_dashboard_stats()
             admin_text = (
                 "👮 <b>لوحة تحكم الأدمن</b>\n\n"
@@ -111,22 +120,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith('d_'):
         try:
-            # استخراج المعرف الحقيقي للقناة من البيانات المبعوثة من الكيبورد
             target_id = data.replace('d_', '')
             database.delete_entity(uid, target_id)
             await query.answer("✅ تم حذف القناة بنجاح", show_alert=True)
-            
-            # تحديث القائمة
             new_entities = database.get_user_entities(uid)
             await query.edit_message_reply_markup(reply_markup=keyboards.get_entities_keyboard(new_entities))
         except Exception as e:
             logger.error(f"Error in delete: {e}")
 
-# --- 3. معالج الرسائل ---
+# --- 3. معالج الرسائل المصلح ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
-    # 1. معالجة اختيار القناة المباشر
+    # 1. معالجة اختيار القناة المباشر (Chat Shared)
     if update.message.chat_shared:
         channel_id = update.message.chat_shared.chat_id
         try:
@@ -138,12 +144,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update.message.reply_text(
                     f"✅ تم ربط القناة بنجاح:\n<b>{channel_name}</b>",
                     parse_mode='HTML',
-                    reply_markup=ReplyKeyboardRemove()
+                    reply_markup=ReplyKeyboardRemove() # إخفاء الكيبورد السفلي بعد النجاح
                 )
             else:
                 await update.message.reply_text("⚠️ هذه القناة مرتبطة مسبقاً.")
         except Exception as e:
-            await update.message.reply_text("❌ حدث خطأ، تأكد أن البوت مشرف في القناة.")
+            await update.message.reply_text("❌ حدث خطأ، تأكد أن البوت مشرف في القناة.", reply_markup=ReplyKeyboardRemove())
         return
 
     # 2. معالجة كود التفعيل
@@ -160,7 +166,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- 4. تشغيل المنظومة ---
 async def main():
     database.init_db()
-    application = Application.builder().token(config.BOT_TOKEN).build()
+    # زيادة وقت الاتصال لتجنب أخطاء Render المتكررة
+    application = Application.builder().token(config.BOT_TOKEN).connect_timeout(30).read_timeout(30).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_callback))
