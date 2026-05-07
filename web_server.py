@@ -1,25 +1,31 @@
 # web_server.py
 import os
-import threading
-from flask import Flask
+from aiohttp import web
 
-app = Flask(__name__)
+# 1. تعريف الصفحات (الردود)
+async def home(request):
+    return web.Response(text="🚀 Bot Sumou Al Arqam is Running!", content_type='text/plain')
 
-@app.route('/')
-def home():
-    return "🚀 Bot Sumou Al Arqam is Running!"
+async def health(request):
+    return web.json_response({"status": "ok"})
 
-@app.route('/health')
-def health():
-    return {"status": "ok"}, 200
+# 2. إعداد التطبيق والروابط
+def create_app():
+    app = web.Application()
+    app.router.add_get('/', home)
+    app.router.add_get('/health', health)
+    return app
 
-def run():
-    # Render يعطي المنفذ عبر متغير البيئة PORT، وإذا لم يوجد يستخدم 10000
+# 3. دالة التشغيل (يجب أن تكون async)
+async def start_server():
+    """تشغيل السيرفر بنظام Async ليتوافق مع بايثون 3.14 وبدون Threading"""
+    app = create_app()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    # Render يطلب المنفذ 10000 افتراضياً
     port = int(os.environ.get("PORT", 10000))
-    # تعطيل الـ reloader مهم جداً عند التشغيل داخل Thread
-    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
-
-def start_server():
-    """تشغيل السيرفر في خلفية مستقلة (Thread) لضمان عدم توقف البوت"""
-    server_thread = threading.Thread(target=run, daemon=True)
-    server_thread.start()
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    
+    await site.start()
+    print(f"🌐 Web server started on port {port} (Using aiohttp)")
