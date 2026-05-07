@@ -91,22 +91,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("⚠️ للمالك فقط", show_alert=True)
 
-        elif data == 'adm_g': # توليد كود يبدأ بـ SMO-
+    elif data == 'adm_g': # توليد كود يبدأ بـ SMO-
         if int(uid) == int(config.ADMIN_ID):
-            # توليد الجزء العشوائي (8 رموز)
             random_part = secrets.token_hex(4).upper()
-            # إضافة البادئة المطلوبة
             new_code = f"SMO-{random_part}"
             
-            # إرسال الكود للدالة في database.py
             if database.add_subscription_code(new_code, 30):
-                await query.message.reply_text(
-                    f"🎫 <b>تم توليد كود جديد:</b>\n<code>{new_code}</code>", 
-                    parse_mode='HTML'
-                )
+                await query.message.reply_text(f"🎫 <b>تم توليد كود جديد:</b>\n<code>{new_code}</code>", parse_mode='HTML')
             else:
-                await query.answer("❌ فشل حفظ الكود في القاعدة")
-
+                await query.answer("❌ فشل حفظ الكود")
 
     elif data == 'adm_s': # إحصائيات مفصلة
         if int(uid) == int(config.ADMIN_ID):
@@ -124,6 +117,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     
+    # معالجة القنوات المشتركة (Chat Shared)
     if update.message.chat_shared:
         channel_id = update.message.chat_shared.chat_id
         try:
@@ -133,27 +127,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 await update.message.reply_text("⚠️ مرتبطة مسبقاً.")
         except:
-            await update.message.reply_text("❌ خطأ، تأكد أن البوت مشرف.", reply_markup=ReplyKeyboardRemove())
+            await update.message.reply_text("❌ خطأ، تأكد أن البوت مشرف في القناة.", reply_markup=ReplyKeyboardRemove())
         return
 
+    # معالجة إدخال كود التفعيل
     if context.user_data.get('awaiting_code'):
         success, msg = database.activate_user_with_code(uid, update.message.text.strip())
         context.user_data['awaiting_code'] = False
-        await update.message.reply_text(msg, reply_markup=await keyboards.get_main_menu(uid, (await context.bot.get_me()).username))
+        bot_info = await context.bot.get_me()
+        await update.message.reply_text(msg, reply_markup=await keyboards.get_main_menu(uid, bot_info.username))
 
 # --- 4. التشغيل ---
 async def main():
     database.init_db()
     app = Application.builder().token(config.BOT_TOKEN).connect_timeout(30).build()
+    
+    # إضافة المعالجات
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
+    # تشغيل المهام الجانبية
     asyncio.create_task(web_server.start_server())
     asyncio.create_task(services.keep_alive())
     
     logger.info("🚀 النظام يعمل بكامل طاقته...")
-    await app.initialize(); await app.start(); await app.updater.start_polling()
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
     await asyncio.Event().wait()
 
 if __name__ == '__main__':
