@@ -45,20 +45,27 @@ def update_user_token(uid, new_token):
             cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
             conn.commit()
 
-def add_entity(uid, tid):
-    """ربط قناة جديدة"""
+# --- تم التعديل هنا لدعم 3 عناصر (UID, TID, NAME) ---
+def add_entity(uid, tid, name="قناة/مجموعة"):
+    """ربط القناة بالمستخدم مع دعم حفظ الاسم (Neon DB)"""
     with get_db() as conn:
         if conn is None: return
         with conn.cursor() as cur:
-            cur.execute("INSERT INTO entities (user_id, entity_id) VALUES (%s, %s) ON CONFLICT DO NOTHING", (str(uid), tid))
+            cur.execute("""
+                INSERT INTO entities (user_id, entity_id, entity_name) 
+                VALUES (%s, %s, %s) 
+                ON CONFLICT (user_id, entity_id) 
+                DO UPDATE SET entity_name = EXCLUDED.entity_name
+            """, (str(uid), str(tid), name))
             conn.commit()
 
+# --- تم التعديل هنا لجلب الاسم أيضاً لعرضه في الأزرار ---
 def get_user_entities(uid):
-    """جلب القنوات المرتبطة"""
+    """جلب القنوات المرتبطة (ID والاسم)"""
     with get_db() as conn:
         if conn is None: return []
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT entity_id FROM entities WHERE user_id = %s", (str(uid),))
+            cur.execute("SELECT entity_id, entity_name FROM entities WHERE user_id = %s", (str(uid),))
             return cur.fetchall()
 
 def delete_entity(user_id, entity_id):
@@ -87,9 +94,12 @@ def get_time_remaining(expiry_date):
     return f"{diff.days} يوم و {diff.seconds // 3600} ساعة"
 
 def format_webhook_links(token, entities):
-    """تجهيز الروابط للعرض في البوت"""
+    """تجهيز الروابط للعرض في البوت بناءً على بيانات Neon"""
     if not entities: return "⚠️ لا توجد قنوات مرتبطة."
     txt = "🌐 <b>روابط الويب هوك:</b>\n\n"
     for e in entities:
-        txt += f"• <code>{config.DOMAIN}/webhook/{token}/{e['entity_id']}</code>\n"
+        # استخدام entity_id من القاموس
+        eid = e['entity_id']
+        ename = e.get('entity_name', 'قناة')
+        txt += f"• {ename}:\n<code>{config.DOMAIN}/webhook/{token}/{eid}</code>\n\n"
     return txt
