@@ -45,9 +45,8 @@ def update_user_token(uid, new_token):
             cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
             conn.commit()
 
-# --- تم التعديل هنا لدعم 3 عناصر (UID, TID, NAME) ---
 def add_entity(uid, tid, name="قناة/مجموعة"):
-    """ربط القناة بالمستخدم مع دعم حفظ الاسم (Neon DB)"""
+    """ربط القناة بالمستخدم مع دعم حفظ الاسم"""
     with get_db() as conn:
         if conn is None: return
         with conn.cursor() as cur:
@@ -59,9 +58,8 @@ def add_entity(uid, tid, name="قناة/مجموعة"):
             """, (str(uid), str(tid), name))
             conn.commit()
 
-# --- تم التعديل هنا لجلب الاسم أيضاً لعرضه في الأزرار ---
 def get_user_entities(uid):
-    """جلب القنوات المرتبطة (ID والاسم)"""
+    """جلب القنوات المرتبطة"""
     with get_db() as conn:
         if conn is None: return []
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -69,7 +67,7 @@ def get_user_entities(uid):
             return cur.fetchall()
 
 def delete_entity(user_id, entity_id):
-    """حذف قناة مرتبطة بمستخدم محدد"""
+    """حذف قناة مرتبطة"""
     with get_db() as conn:
         if conn is None: return
         with conn.cursor() as cur:
@@ -79,14 +77,52 @@ def delete_entity(user_id, entity_id):
             )
             conn.commit()
 
+# --- دالة تفعيل الاشتراك عبر الكود ---
+def redeem_code(uid, code_str):
+    """تفعيل اشتراك المستخدم باستخدام كود"""
+    with get_db() as conn:
+        if conn is None: return False, "❌ فشل الاتصال بقاعدة البيانات"
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # التأكد من صحة الكود في جدول activation_codes (المعرف في init_db)
+            cur.execute("SELECT * FROM activation_codes WHERE code = %s AND is_used = FALSE", (code_str,))
+            code = cur.fetchone()
+            
+            if not code:
+                return False, "❌ الكود غير صحيح، منتهي، أو تم استخدامه مسبقاً."
+            
+            days = code['days']
+            
+            # جلب بيانات المستخدم الحالية لمعرفة تاريخ الانتهاء القديم
+            cur.execute("SELECT expiry_date FROM users WHERE user_id = %s", (str(uid),))
+            user = cur.fetchone()
+            
+            # إذا كان لديه اشتراك فعال، نضيف الأيام الجديدة فوق القديمة
+            now = datetime.datetime.now()
+            if user and user['expiry_date'] and user['expiry_date'] > now:
+                new_expiry = user['expiry_date'] + datetime.timedelta(days=days)
+            else:
+                new_expiry = now + datetime.timedelta(days=days)
+            
+            # تحديث حالة المستخدم واستهلاك الكود
+            cur.execute("""
+                UPDATE users 
+                SET is_activated = TRUE, expiry_date = %s 
+                WHERE user_id = %s
+            """, (new_expiry, str(uid)))
+            
+            cur.execute("UPDATE activation_codes SET is_used = TRUE, used_by = %s WHERE code = %s", (str(uid), code_str))
+            
+            conn.commit()
+            return True, f"✅ تم تفعيل الاشتراك بنجاح!\n⏳ ينتهي في: {new_expiry.strftime('%Y-%m-%d')}"
+
 def is_user_active(user):
-    """فحص الاشتراك"""
+    """فحص هل المستخدم مفعل واشتراكه ساري"""
     if not user or not user['is_activated']: return False
     if user['expiry_date'] and datetime.datetime.now() > user['expiry_date']: return False
     return True
 
 def get_time_remaining(expiry_date):
-    """تنسيق الوقت المتبقي"""
+    """حساب الوقت المتبقي"""
     if not expiry_date: return "غير مفعل 🔓"
     now = datetime.datetime.now()
     if now > expiry_date: return "منتهٍ 🛑"
@@ -94,12 +130,11 @@ def get_time_remaining(expiry_date):
     return f"{diff.days} يوم و {diff.seconds // 3600} ساعة"
 
 def format_webhook_links(token, entities):
-    """تجهيز الروابط للعرض في البوت بناءً على بيانات Neon"""
+    """تنسيق الروابط لإرسالها للمستخدم"""
     if not entities: return "⚠️ لا توجد قنوات مرتبطة."
-    txt = "🌐 <b>روابط الويب هوك:</b>\n\n"
+    txt = "🌐 <b>روابط الويب هوك الخاصة بك:</b>\n\n"
     for e in entities:
-        # استخدام entity_id من القاموس
         eid = e['entity_id']
-        ename = e.get('entity_name', 'قناة')
-        txt += f"• {ename}:\n<code>{config.DOMAIN}/webhook/{token}/{eid}</code>\n\n"
+        ename = e.get('entity_name', 'قناة غير مسمية')
+        txt += f"📍 {ename}:\n<code>{config.DOMAIN}/webhook/{token}/{eid}</code>\n\n"
     return txt
