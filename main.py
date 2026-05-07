@@ -55,7 +55,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith('set_lang_'):
         lang = data.split('_')[2]
         await terms.send_terms(update, context, user_lang=lang)
-    elif data == 'accept_terms' or data == 'home':
+    elif data == 'accept_terms':
+        await terms.handle_terms_callback(update, context, check_activation_logic)
+        
+    elif data == 'home':
         await check_activation_logic(update, context)
     elif data == 'decline_terms':
         await query.edit_message_text("🚫 يجب الموافقة على الشروط لاستخدام خدماتنا.")
