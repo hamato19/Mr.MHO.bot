@@ -142,6 +142,7 @@ async def handle_chat_shared(update: Update, context: ContextTypes.DEFAULT_TYPE)
             # تصحيح علامات التنصيص هنا لضمان عمل الملف في Render
             await update.message.reply_text("❌ فشل الربط. تأكد أن البوت 'أدمن' في القناة.", reply_markup=ReplyKeyboardRemove())
 
+
 # --- 5. الإقلاع والتشغيل ---
 async def main():
     database.init_db()
