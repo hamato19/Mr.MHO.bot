@@ -85,6 +85,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(f"👤 <b>بيانات الحساب:</b>\n🆔 ID: <code>{uid}</code>\n🚦 الحالة: {status}\n⏳ المتبقي: {expiry}", parse_mode='HTML', reply_markup=keyboards.get_back_home())
     elif data == 'wh':
         await query.edit_message_text(services.format_webhook_links(uid), parse_mode='HTML', reply_markup=keyboards.get_back_home())
+    
+    # --- زر التوكن (تم تحديثه للتنبيه الصامت داخل البوت) ---
+    elif data == 'tok':
+        new_tok = secrets.token_hex(16)
+        if database.update_user_token(uid, new_tok):
+            # التنبيه المنبثق داخل التلجرام فقط
+            await query.answer("✅ تم تحديث رمز الأمان بنجاح", show_alert=False)
+            # تحديث نص الرسالة
+            await query.edit_message_text(
+                "🔐 <b>تحديث أمني ناجح</b>\n\nلقد تم توليد رمز جديد، روابط الويب هوك الخاصة بك جاهزة الآن للعمل.",
+                parse_mode='HTML',
+                reply_markup=keyboards.get_back_home()
+            )
+
     elif data == 'ren':
         await query.edit_message_text("🎫 أرسل كود التفعيل الجديد:", reply_markup=keyboards.get_back_home())
         context.user_data['awaiting_code'] = True
@@ -94,20 +108,20 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ents = database.get_user_entities(uid)
         await query.edit_message_text("📋 <b>إدارة القنوات:</b>", parse_mode='HTML', reply_markup=keyboards.get_entities_keyboard(ents))
 
-    # --- إدارة لوحة الأدمن (المنطقة التي كان بها الخطأ) ---
+    # --- إدارة لوحة الأدمن ---
     elif is_owner:
         if data == 'adm':
             t, a, c = database.get_admin_dashboard_stats()
             await query.edit_message_text(f"👮 <b>لوحة المالك</b>\n\n👥 الكل: {t} | ✅ النشط: {a}\n🎫 أكواد: {c}", parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
         
-        elif data == 'adm_u': # تم تصحيح الإزاحة هنا
+        elif data == 'adm_u':
             users = database.get_all_users()
             if not users:
-                await query.answer("📋 لا يوجد مستخدمين", show_alert=True)
+                await query.answer("📋 القائمة فارغة حالياً", show_alert=True)
             else:
-                await query.edit_message_text("👥 <b>إدارة المستخدمين:</b>", reply_markup=keyboards.get_users_management_keyboard(users))
+                await query.edit_message_text("👥 <b>إدارة المستخدمين:</b>", parse_mode='HTML', reply_markup=keyboards.get_users_management_keyboard(users))
 
-        elif data == 'adm_s': # تم تصحيح الإزاحة هنا
+        elif data == 'adm_s':
             t, a, c = database.get_admin_dashboard_stats()
             await query.edit_message_text(f"📊 <b>إحصائيات المنظومة:</b>\n\nالمستخدمين: {t}\nالمشتركين: {a}\nالأكواد المتوفرة: {c}", parse_mode='HTML', reply_markup=keyboards.get_back_to_admin())
 
