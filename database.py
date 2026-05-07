@@ -177,3 +177,28 @@ def activate_user_with_code(user_id, code):
     except Exception as e:
         logging.error(f"Error in activation: {e}")
         return False, "❌ حدث خطأ فني أثناء التفعيل."
+
+# --- 5. نظام التفعيل وتوليد الأكواد المطور ---
+
+def add_subscription_code(days=30):
+    """
+    توليد كود اشتراك فريد يبدأ بـ Smo- وحفظه في القاعدة
+    """
+    # توليد رمز عشوائي ودمجه مع البادئة المطلوبة
+    random_suffix = secrets.token_hex(4).upper() # توليد 8 رموز عشوائية
+    new_code = f"Smo-{random_suffix}"
+    
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO activation_codes (code, days, is_used) VALUES (%s, %s, FALSE)",
+                    (new_code, days)
+                )
+                conn.commit()
+                logging.info(f"✅ تم توليد كود جديد: {new_code}")
+                return new_code # نرجع الكود لكي يتم عرضه للأدمن في تلجرام
+    except Exception as e:
+        logging.error(f"❌ Error in add_subscription_code: {e}")
+        return None
+
