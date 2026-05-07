@@ -1,4 +1,3 @@
-# admin.py
 import logging
 import asyncio
 import datetime
@@ -16,9 +15,6 @@ async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     import keyboards 
     kb = keyboards.get_admin_main_keyboard()
     
-    # إضافة زر استعراض الأكواد للقائمة إذا لم يكن موجوداً في الكيبورد الأساسي
-    # kb.inline_keyboard.insert(1, [InlineKeyboardButton("📜 الأكواد غير المستخدمة", callback_data='admin_view_codes')])
-    
     text = "👮 <b>لوحة تحكم المطور (أبو إلياس)</b>\n\nإدارة المستخدمين والاشتراكات والبيانات:"
     
     if query:
@@ -26,7 +22,7 @@ async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.effective_chat.send_message(text, reply_markup=kb, parse_mode=ParseMode.HTML)
 
-# --- 2. نظام توليد الأكواد وعرضها ---
+# --- 2. نظام توليد الأكواد ---
 async def show_generate_code_menu(update: Update):
     query = update.callback_query
     import keyboards
@@ -60,29 +56,6 @@ async def process_generate_code(update: Update, days: int):
         logging.error(f"Generate Code Error: {e}")
         await query.answer("❌ خطأ في قاعدة البيانات")
 
-async def show_unused_codes(update: Update):
-    """عرض الأكواد التي لم يتم تفعيلها بعد"""
-    query = update.callback_query
-    try:
-        with get_db() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # التأكد من ترتيب الأكواد من الأحدث للأقدم
-                cur.execute("SELECT code, days_valid FROM activation_codes WHERE is_used = False ORDER BY id DESC")
-                codes = cur.fetchall()
-        
-        if not codes:
-            return await query.answer("لا توجد أكواد غير مستخدمة حالياً.", show_alert=True)
-
-        text = "🎫 <b>أكواد التفعيل المتوفرة:</b>\n\n"
-        for c in codes:
-            text += f"• <code>{c['code']}</code> ({c['days_valid']} يوم)\n"
-        
-        kb = [[InlineKeyboardButton("🔙 عودة", callback_data='admin_panel')]]
-        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
-    except Exception as e:
-        logging.error(f"List Codes Error: {e}")
-        await query.answer("❌ حدث خطأ أثناء جلب الأكواد.")
-
 # --- 3. إدارة المستخدمين ---
 async def list_users(update: Update):
     query = update.callback_query
@@ -97,72 +70,89 @@ async def list_users(update: Update):
         for u in users:
             status = "✅" if u['is_activated'] else "❌"
             text += f"• <code>{u['user_id']}</code> {status}\n"
-            kb.append([InlineKeyboardButton(f"⚙️ إدارة {u['user_id']}", callback_data=f"manage_user_{u['user_id']}")])
+            # هنا التعديل: callback مطابق لما في main.py
+            kb.append([InlineKeyboardButton(f"⚙️ إدارة {u['user_id']}", callback_data=f"manage_{u['user_id']}")])
         
         kb.append([InlineKeyboardButton("🔙 عودة", callback_data='admin_panel')])
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
     except Exception as e:
         logging.error(f"List Users Error: {e}")
 
-async def manage_single_user(update: Update, user_id: str):
+async def manage_single_user(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: str):
     query = update.callback_query
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
+                cur.execute("SELECT * FROM users WHERE user_id = %s", (str(user_id),))
                 user = cur.fetchone()
         
         if not user: return await query.answer("❌ مستخدم غير موجود")
 
         status_txt = "نشط ✅" if user['is_activated'] else "غير مفعل ❌"
-        expiry = user['expiry_date'].strftime('%Y-%m-%d') if user['expiry_date'] else "غير محدد"
+        # حماية في حال كان التاريخ None
+        expiry = user['expiry_date'].strftime('%Y-%m-%d %H:%M') if user['expiry_date'] else "غير محدد"
         
         text = (f"👤 <b>إدارة المستخدم:</b> <code>{user_id}</code>\n\n"
                 f"• الحالة: {status_txt}\n"
                 f"• ينتهي في: <code>{expiry}</code>\n"
                 f"• الرمز السري: <code>{user['secret_token']}</code>")
         
+        # أزرار الأكشن: adm_Action_UserId
         kb = [
             [InlineKeyboardButton("✅ تفعيل 30 يوم", callback_data=f"adm_act_{user_id}"),
              InlineKeyboardButton("🚫 تعطيل", callback_data=f"adm_deact_{user_id}")],
             [InlineKeyboardButton("🗑️ حذف نهائي", callback_data=f"adm_del_{user_id}")],
-            [InlineKeyboardButton("🔙 عودة", callback_data='admin_users')]
+            [InlineKeyboardButton("🔙 عودة للقائمة", callback_data='admin_users')]
         ]
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
     except Exception as e: 
-        logging.error(e)
+        logging.error(f"Manage User Error: {e}")
 
-async def update_user_status(update: Update, action: str, user_id: str):
+# --- 4. معالجة إجراءات الأدمن (تفعيل/تعطيل/حذف) ---
+async def handle_admin_actions(update: Update, context: ContextTypes.DEFAULT_TYPE, action: str, user_id: str):
     query = update.callback_query
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
-                if action == 'activate':
+                if action == 'act': # تفعيل
                     new_expiry = datetime.datetime.now() + datetime.timedelta(days=30)
                     cur.execute("UPDATE users SET is_activated = True, expiry_date = %s WHERE user_id = %s", (new_expiry, user_id))
-                    msg = "✅ تم التفعيل"
-                elif action == 'deactivate':
+                    msg = "✅ تم التفعيل لمدة 30 يوم"
+                elif action == 'deact': # تعطيل
                     cur.execute("UPDATE users SET is_activated = False WHERE user_id = %s", (user_id,))
-                    msg = "❌ تم التعطيل"
-                elif action == 'delete':
+                    msg = "❌ تم تعطيل الحساب"
+                elif action == 'del': # حذف
                     cur.execute("DELETE FROM entities WHERE user_id = %s", (user_id,))
                     cur.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
-                    msg = "🗑️ تم الحذف"
+                    msg = "🗑️ تم حذف المستخدم وبياناته"
                 conn.commit()
+        
         await query.answer(msg, show_alert=True)
+        # العودة لقائمة المستخدمين لتحديث العرض
         await list_users(update)
     except Exception as e: 
-        logging.error(e)
+        logging.error(f"Admin Action Error: {e}")
+        await query.answer("❌ فشل تنفيذ الإجراء")
 
-# --- 4. الإحصائيات ---
+# --- 5. الإحصائيات ---
 async def show_admin_stats(update: Update):
     query = update.callback_query
-    with get_db() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM users")
-            total = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM users WHERE is_activated = True")
-            active = cur.fetchone()[0]
-    
-    text = f"📊 <b>إحصائيات نظام Mr.MHO:</b>\n\n• إجمالي المستخدمين: {total}\n• المشتركين النشطين: {active}"
-    await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 عودة", callback_data='admin_panel')]]), parse_mode=ParseMode.HTML)
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM users")
+                total = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM users WHERE is_activated = True")
+                active = cur.fetchone()[0]
+                cur.execute("SELECT COUNT(*) FROM entities")
+                channels = cur.fetchone()[0]
+        
+        text = (f"📊 <b>إحصائيات نظام سمو الأرقام:</b>\n\n"
+                f"• إجمالي المستخدمين: <code>{total}</code>\n"
+                f"• المشتركين النشطين: <code>{active}</code>\n"
+                f"• القنوات المرتبطة: <code>{channels}</code>")
+        
+        kb = [[InlineKeyboardButton("🔙 عودة", callback_data='admin_panel')]]
+        await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode=ParseMode.HTML)
+    except Exception as e:
+        logging.error(f"Stats Error: {e}")
