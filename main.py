@@ -39,14 +39,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_msg = "👋 مرحباً بك في نظام سمو الأرقام\nالرجاء اختيار اللغة:\n\nWelcome! Please choose your language:"
     await update.effective_chat.send_message(welcome_msg, reply_markup=keyboards.get_language_keyboard())
 
-# --- 2. معالج الأزرار الشامل ---
+# --- 2. معالج الأزرار الشامل (المرتبط بقاعدة البيانات) ---
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
     uid = update.effective_user.id
     await query.answer()
 
-    # فحص الحظر (للأعضاء فقط)
+    # فحص الحظر (للأعضاء فقط) من قاعدة البيانات
     if int(uid) != ADMIN_ID:
         is_blocked, _ = security.is_user_blocked(uid)
         if is_blocked: return await query.answer("🚫 حسابك مقيد حالياً.", show_alert=True)
@@ -62,7 +62,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'decline_terms':
         await query.edit_message_text("🚫 يجب الموافقة على الشروط لاستخدام خدماتنا.")
 
-    # --- ب. إدارة الحساب والقنوات ---
+    # --- ب. إدارة الحساب والقنوات (جلب مباشر من Neon) ---
     elif data == 'acc':
         user = services.get_user_data(uid)
         time_left = services.get_time_remaining(user['expiry_date'])
@@ -76,31 +76,34 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'add_ch':
         await query.message.reply_text("📢 قم بإضافة البوت لقناتك كمشرف، ثم اضغط الزر لاختيار القناة:", reply_markup=keyboards.get_channel_request_keyboard())
 
-    elif data == 'view_chs': # قنواتي (تم تصحيح الـ await)
-        ents = services.get_user_entities(uid)
+    elif data == 'view_chs': # قنواتي (قاعدة البيانات)
+        ents = services.get_user_entities(uid) # جلب من جدول entities
         if not ents: 
-            return await query.edit_message_text("❌ لا توجد قنوات مرتبطة.", reply_markup=keyboards.get_back_to_home())
-        await query.edit_message_text("📺 قنواتك (اضغط للحذف):", reply_markup=keyboards.get_entities_keyboard(ents))
+            return await query.edit_message_text("❌ لا توجد قنوات مرتبطة بحسابك.", reply_markup=keyboards.get_back_to_home())
+        
+        await query.edit_message_text("📺 قنواتك المرتبطة (اضغط للحذف):", 
+                                       reply_markup=keyboards.get_entities_keyboard(ents))
 
-    elif data.startswith('del_ent_'):
+    elif data.startswith('del_ent_'): # حذف من قاعدة البيانات
         ent_id = data.replace('del_ent_', '')
         services.delete_entity(uid, ent_id)
-        await query.answer("🗑️ تم حذف الربط بنجاح", show_alert=True)
+        await query.answer("🗑️ تم حذف الربط من قاعدة البيانات", show_alert=True)
         await check_activation_logic(update, context)
 
     # --- ج. نظام الويب هوك والرمز ---
     elif data == 'view_wh':
+        # الروابط تتولد بناءً على قنوات المستخدم المخزنة في Neon
         await webhooks.show_webhook_links(update, context)
     elif data == 'gen_token':
         await webhooks.refresh_secret_token(update, context)
 
-    # --- د. لوحة التحكم للأدمن وتوليد الأكواد ---
+    # --- د. لوحة التحكم للأدمن (توليد الأكواد وحفظها في Neon) ---
     elif data.startswith(('admin_', 'gen_days_', 'manage_', 'adm_')):
         if int(uid) != ADMIN_ID: return
         
         if data == 'admin_panel': 
             await admin.show_admin_panel(update, context)
-        elif data == 'admin_generate_code': # تفعيل زر توليد الأكواد (تم التصحيح)
+        elif data == 'admin_generate_code': 
             await query.edit_message_text("🔑 اختر مدة الكود المراد توليده:", reply_markup=keyboards.get_code_generation_keyboard())
         elif data == 'admin_stats': 
             await admin.show_admin_stats(update)
@@ -114,18 +117,30 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             p = data.split('_')
             if len(p) >= 3: await admin.handle_admin_actions(update, context, p[1], p[2])
 
-# --- 3. معالجة الرسائل ---
+# --- 3. معالجة الرسائل وربط القنوات بالاسم ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_user: return
     uid = update.effective_user.id
 
+    # استقبال القناة المختارة وحفظها بالاسم في Neon
     if update.message and update.message.chat_shared:
-        services.add_entity(uid, str(update.message.chat_shared.chat_id))
-        return await update.message.reply_text("✅ تم ربط القناة بنجاح! توجه الآن لروابط الويب هوك.", reply_markup=keyboards.get_back_to_home())
+        chat_id = update.message.chat_shared.chat_id
+        try:
+            # جلب اسم القناة الحقيقي لعرضه في الأزرار لاحقاً
+            chat_info = await context.bot.get_chat(chat_id)
+            chat_title = chat_info.title
+        except:
+            chat_title = f"قناة {chat_id}"
+            
+        services.add_entity(uid, str(chat_id), chat_title)
+        return await update.message.reply_text(f"✅ تم ربط <b>{chat_title}</b> بنجاح!", 
+                                               parse_mode=ParseMode.HTML, 
+                                               reply_markup=keyboards.get_back_to_home())
     
     if not update.message or not update.message.text: return
     text = update.message.text.strip().upper()
 
+    # نظام تفعيل الأكواد (التحقق من جدول codes في Neon)
     if text.startswith("MHO-") or context.user_data.get('state') == 'WAIT_CODE':
         success, days = await activate_with_code(uid, text)
         if success:
@@ -134,7 +149,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return await check_activation_logic(update, context)
         await update.message.reply_text("❌ الكود خاطئ أو منتهي.")
 
-# --- 4. منطق التحقق من الاشتراك ---
+# --- 4. منطق التحقق من الاشتراك (Neon Sync) ---
 async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     bot_me = await context.bot.get_me()
@@ -154,16 +169,17 @@ async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_T
     else:
         await update.effective_chat.send_message(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
 
-# --- 5. التشغيل ---
+# --- 5. التشغيل النهائي ---
 if __name__ == "__main__":
-    init_db.initialize_database()
+    init_db.initialize_database() # التأكد من وجود الجداول في Neon
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
     
+    # تشغيل سيرفر الويب هوك لاستقبال إشارات TradingView
     threading.Thread(target=webhooks.run_server, daemon=True).start()
     
-    print("🚀 Bot Sumou Al Arqam is Live!")
+    print("🚀 Bot Sumou Al Arqam is Fully Connected to Neon & Online!")
     application.run_polling(drop_pending_updates=True)
