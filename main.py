@@ -1,26 +1,26 @@
 import os
-import secrets
 import asyncio
-import threading
 import logging
-import datetime
-import requests
-import time
-from flask import Flask, request, jsonify
 from telegram import Update
 from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder, 
+    CommandHandler, 
+    MessageHandler, 
+    CallbackQueryHandler, 
+    filters, 
+    ContextTypes
+)
 
-# --- استيراد الملفات المساعدة ---
+# --- استيراد ملفاتك الخاصة ---
 import config
 import keyboards 
 import services
 import init_db
 import security
-import owner
 import admin      
 import terms
-import web_server # ملف السيرفر المستقل
+import web_server # ملف aiohttp الجديد
 
 # الإعدادات الأساسية
 BOT_TOKEN = config.BOT_TOKEN
@@ -35,7 +35,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     services.initialize_user(uid)
     
-    # إذا كان المالك، يدخل مباشرة للقائمة
+    # دخول المالك مباشرة
     if int(uid) == ADMIN_ID:
         return await check_activation_logic(update, context)
         
@@ -49,12 +49,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     await query.answer()
 
-    # فحص الحظر للأعضاء
+    # فحص الحظر
     if int(uid) != ADMIN_ID:
         is_blocked, _ = security.is_user_blocked(uid)
         if is_blocked: return await query.answer("🚫 حسابك مقيد حالياً.", show_alert=True)
 
-    # الأزرار العامة
+    # الأزرار الأساسية
     if data.startswith('set_lang_'):
         lang = data.split('_')[2]
         await terms.send_terms(update, context, user_lang=lang)
@@ -63,7 +63,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'home':
         await check_activation_logic(update, context)
     
-    # إدارة الحساب
+    # بيانات الحساب
     elif data == 'acc':
         user = services.get_user_data(uid)
         time_left = services.get_time_remaining(user['expiry_date'])
@@ -74,7 +74,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['state'] = 'WAIT_CODE'
         await query.edit_message_text("📥 <b>أدخل كود التفعيل (MHO-xxxx) الآن:</b>", parse_mode=ParseMode.HTML, reply_markup=keyboards.get_back_to_home())
 
-    # إدارة القنوات
+    # القنوات المرتبطة
     elif data == 'view_chs':
         ents = services.get_user_entities(uid)
         if not ents: 
@@ -90,17 +90,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == 'add_ch':
         await query.message.reply_text("📢 قم بإضافة البوت لقناتك كمشرف، ثم اضغط الزر لاختيار القناة:", reply_markup=keyboards.get_channel_request_keyboard())
 
-    # لوحة الأدمن
+    # أوامر الأدمن
     elif data.startswith(('admin_', 'gen_days_', 'manage_')):
         if int(uid) == ADMIN_ID:
             await admin.handle_callback_logic(update, context, data)
 
-# --- 3. معالجة الرسائل والأكواد ---
+# --- 3. معالجة الرسائل والقنوات المختارة ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.effective_user: return
     uid = update.effective_user.id
 
-    # ربط القناة عند مشاركتها
+    # استقبال القناة المختارة
     if update.message and update.message.chat_shared:
         chat_id = update.message.chat_shared.chat_id
         try:
@@ -114,7 +114,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     text = update.message.text.strip().upper()
 
-    # معالجة أكواد التفعيل
+    # معالجة الأكواد
     if text.startswith("MHO-") or context.user_data.get('state') == 'WAIT_CODE':
         success, msg = services.redeem_code(uid, text)
         await update.message.reply_text(msg)
@@ -122,7 +122,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['state'] = None
             return await check_activation_logic(update, context)
 
-# --- 4. منطق عرض القوائم ---
+# --- 4. منطق القوائم الرئيسية ---
 async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     bot_info = await context.bot.get_me()
@@ -141,23 +141,39 @@ async def check_activation_logic(update: Update, context: ContextTypes.DEFAULT_T
     else:
         await update.effective_chat.send_message(msg, reply_markup=kb, parse_mode=ParseMode.HTML)
 
-# --- 5. التشغيل النهائي ---
-if __name__ == "__main__":
-    # تهيئة قاعدة البيانات
+# --- 5. الهيكل التشغيلي (Main Entry Point) ---
+async def main():
+    # 1. تهيئة قاعدة البيانات
     try:
         init_db.initialize_database()
     except Exception as e:
         logging.error(f"❌ DB Error: {e}")
 
-    # تشغيل السيرفر في الخلفية لـ Render
-    web_server.start_server()
+    # 2. تشغيل السيرفر الموحد (aiohttp)
+    await web_server.start_server()
 
-    # بناء وتشغيل البوت
+    # 3. بناء تطبيق التليجرام
     application = ApplicationBuilder().token(BOT_TOKEN).build()
     
+    # 4. إضافة المعالجات
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
-    
-    print("🚀 Bot Sumou Al Arqam is starting polling...")
-    application.run_polling(drop_pending_updates=True, close_loop=False)
+
+    # 5. تشغيل البوت يدوياً داخل الـ Loop لضمان الاستقرار
+    async with application:
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(drop_pending_updates=True)
+        
+        print("🚀 Bot Sumou Al Arqam is ONLINE & READY!")
+        
+        # الانتظار اللانهائي
+        while True:
+            await asyncio.sleep(3600)
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("🔴 تم إيقاف النظام.")
