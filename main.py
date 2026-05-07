@@ -1,161 +1,146 @@
-# services.py
-import os
-import datetime
-import secrets
-import requests
+import logging
 import asyncio
-from database import get_db
-from psycopg2.extras import RealDictCursor
+import secrets
+from telegram import Update
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+
+# استيراد الملفات المحلية المترابطة
 import config
+import database
+import services
+import keyboards
+import web_server
 
-async def keep_alive():
-    """منع السيرفر من الدخول في وضع النوم"""
-    domain = os.getenv("DOMAIN") or config.DOMAIN
-    while True:
-        try: 
-            if domain:
-                requests.get(domain, timeout=10)
-        except Exception: 
-            pass
-        await asyncio.sleep(600)
+# إعداد السجلات لمراقبة أداء السيرفر في Render
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-def initialize_user(uid):
-    """إضافة المستخدم مع رمز سري افتراضي"""
-    with get_db() as conn:
-        if conn is None: return
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO users (user_id, secret_token) 
-                VALUES (%s, %s) 
-                ON CONFLICT (user_id) DO NOTHING
-            """, (str(uid), secrets.token_hex(8)))
-            conn.commit()
+# --- 1. الدالة الرئيسية عند بدء البوت /start ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    # إنشاء ملف للمستخدم في قاعدة البيانات إن لم يوجد
+    services.initialize_user(uid)
+    
+    user = services.get_user_data(uid)
+    
+    welcome_text = (
+        "👋 <b>مرحباً بك في منظومة سمو الأرقام (Mr. MOH)</b>\n\n"
+        "هذا البوت هو جسرك لربط إشارات <b>TradingView</b> مباشرة بقنواتك.\n\n"
+        "🚀 <b>كيف تبدأ؟</b>\n"
+        "1. أضف البوت مشرفاً في قناتك.\n"
+        "2. اربط القناة من قسم 'قنواتي'.\n"
+        "3. انسخ رابط الويب هوك وضعه في تنبيهات المنصة."
+    )
+    
+    await update.message.reply_text(
+        welcome_text,
+        parse_mode='HTML',
+        reply_markup=keyboards.get_main_keyboard(user)
+    )
 
-def set_user_language(uid, lang):
-    """حفظ لغة المستخدم"""
-    with get_db() as conn:
-        if conn is None: return
-        with conn.cursor() as cur:
-            cur.execute("UPDATE users SET language = %s WHERE user_id = %s", (lang, str(uid)))
-            conn.commit()
+# --- 2. معالج الأزرار التفاعلية (Callback Queries) ---
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    data = query.data
+    uid = update.effective_user.id
+    
+    await query.answer()
 
-def get_user_language(uid):
-    """جلب لغة المستخدم"""
-    with get_db() as conn:
-        if conn is None: return 'ar'
-        with conn.cursor() as cur:
-            cur.execute("SELECT language FROM users WHERE user_id = %s", (str(uid),))
-            res = cur.fetchone()
-            return res[0] if res else 'ar'
+    # --- قسم الويب هوك وتوليد الإشارات ---
+    if data == 'view_webhooks':
+        msg_text = services.format_webhook_links(uid)
+        await query.edit_message_text(msg_text, parse_mode='HTML', reply_markup=keyboards.get_webhook_keyboard())
 
-def get_user_data(uid):
-    """جلب كافة بيانات المستخدم"""
-    with get_db() as conn:
-        if conn is None: return None
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM users WHERE user_id = %s", (str(uid),))
-            return cur.fetchone()
+    elif data == 'gen_new_token':
+        # توليد رمز أمان جديد وتحديث روابط الإشارة فوراً
+        new_token = secrets.token_hex(8)
+        services.update_user_token(uid, new_token)
+        msg_text = services.format_webhook_links(uid)
+        await query.edit_message_text(
+            f"✅ <b>تم تحديث رمز الأمان بنجاح!</b>\n\n{msg_text}",
+            parse_mode='HTML',
+            reply_markup=keyboards.get_webhook_keyboard()
+        )
 
-def update_user_token(uid, new_token):
-    """تحديث رمز الويب هوك الخاص بالمستخدم"""
-    with get_db() as conn:
-        if conn is None: return
-        with conn.cursor() as cur:
-            cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(uid)))
-            conn.commit()
+    # --- قسم قنواتي وإدارة الربط ---
+    elif data == 'my_channels':
+        msg_text = services.format_my_entities(uid)
+        await query.edit_message_text(msg_text, parse_mode='HTML', reply_markup=keyboards.get_channels_management_keyboard())
 
-def add_entity(uid, tid, name="قناة/مجموعة"):
-    """ربط القناة بالمستخدم مع حل مشكلة التعارض"""
-    with get_db() as conn:
-        if conn is None: return
-        with conn.cursor() as cur:
-            cur.execute("""
-                INSERT INTO entities (user_id, entity_id, entity_name) 
-                VALUES (%s, %s, %s) 
-                ON CONFLICT (entity_id) 
-                DO UPDATE SET 
-                    user_id = EXCLUDED.user_id,
-                    entity_name = EXCLUDED.entity_name
-            """, (str(uid), str(tid), name))
-            conn.commit()
-
-def get_user_entities(uid):
-    """جلب القنوات المرتبطة"""
-    with get_db() as conn:
-        if conn is None: return []
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT entity_id, entity_name FROM entities WHERE user_id = %s", (str(uid),))
-            return cur.fetchall()
-
-def delete_entity(user_id, entity_id):
-    """حذف قناة مرتبطة"""
-    with get_db() as conn:
-        if conn is None: return
-        with conn.cursor() as cur:
-            cur.execute(
-                "DELETE FROM entities WHERE user_id = %s AND entity_id = %s",
-                (str(user_id), str(entity_id))
+    # --- لوحة تحكم المالك (خاصة بـ فهد بن محمد) ---
+    elif data == 'admin_panel':
+        if uid == config.ADMIN_ID:
+            u_count, c_count = services.get_admin_stats()
+            admin_msg = (
+                f"🛡️ <b>لوحة تحكم المالك</b>\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"👥 المستخدمين: {u_count}\n"
+                f"🎫 أكواد التفعيل: {c_count}\n"
+                f"⚙️ الحالة: متصل (Online)"
             )
-            conn.commit()
+            await query.edit_message_text(admin_msg, parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
+        else:
+            await query.answer("⚠️ صلاحية المالك مطلوبة.", show_alert=True)
 
-def redeem_code(uid, code_str):
-    """تفعيل اشتراك المستخدم"""
-    with get_db() as conn:
-        if conn is None: return False, "❌ فشل الاتصال بقاعدة البيانات"
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute("SELECT * FROM activation_codes WHERE code = %s AND is_used = FALSE", (code_str,))
-            code = cur.fetchone()
-            
-            if not code:
-                return False, "❌ الكود غير صحيح أو مستخدم."
-            
-            days = code['days']
-            cur.execute("SELECT expiry_date FROM users WHERE user_id = %s", (str(uid),))
-            user = cur.fetchone()
-            
-            now = datetime.datetime.now()
-            if user and user['expiry_date'] and user['expiry_date'] > now:
-                new_expiry = user['expiry_date'] + datetime.timedelta(days=days)
-            else:
-                new_expiry = now + datetime.timedelta(days=days)
-            
-            cur.execute("""
-                UPDATE users SET is_activated = TRUE, expiry_date = %s WHERE user_id = %s
-            """, (new_expiry, str(uid)))
-            cur.execute("UPDATE activation_codes SET is_used = TRUE, used_by = %s WHERE code = %s", (str(uid), code_str))
-            conn.commit()
-            return True, f"✅ تفعيل بنجاح!\n⏳ ينتهي: {new_expiry.strftime('%Y-%m-%d')}"
+    # --- العودة للوحة التحكم الرئيسية ---
+    elif data == 'back_to_home':
+        user = services.get_user_data(uid)
+        expiry_info = services.get_time_remaining(user['expiry_date'])
+        status = "✅ مفعل" if services.is_user_active(user) else "❌ غير مفعل"
+        
+        home_text = (
+            f"🏠 <b>لوحة التحكم | سمو الأرقام</b>\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"👤 المعرف: <code>{uid}</code>\n"
+            f"🚦 الاشتراك: {status}\n"
+            f"⏳ المتبقي: {expiry_info}\n"
+            f"🔑 الرمز: <code>{user['secret_token']}</code>"
+        )
+        await query.edit_message_text(home_text, parse_mode='HTML', reply_markup=keyboards.get_main_keyboard(user))
 
-def is_user_active(user):
-    if not user or not user['is_activated']: return False
-    if user['expiry_date'] and datetime.datetime.now() > user['expiry_date']: return False
-    return True
+# --- 3. معالج الرسائل (لتفعيل الأكواد) ---
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    text = update.message.text
 
-def get_time_remaining(expiry_date):
-    if not expiry_date: return "غير مفعل 🔓"
-    now = datetime.datetime.now()
-    if now > expiry_date: return "منتهٍ 🛑"
-    diff = expiry_date - now
-    return f"{diff.days} يوم و {diff.seconds // 3600} ساعة"
+    # إذا كان المستخدم في حالة انتظار لإدخال كود
+    if context.user_data.get('awaiting_code'):
+        success, message = services.redeem_code(uid, text)
+        context.user_data['awaiting_code'] = False
+        await update.message.reply_text(message, reply_markup=keyboards.get_main_keyboard(services.get_user_data(uid)))
 
-def format_webhook_links(token, entities):
-    """تنسيق الروابط باستخدام الدومين من Render"""
-    # الأولوية لمتغير البيئة في Render، ثم ملف الكوفنج
-    domain = os.getenv("DOMAIN") or config.DOMAIN
-    domain = domain.strip('/') if domain else ""
+# --- 4. الدالة الرئيسية لتشغيل المنظومة ---
+async def main():
+    # أ. تهيئة قاعدة البيانات
+    database.init_db()
 
-    if not domain:
-        return "⚠️ خطأ: متغير DOMAIN غير معرف في Render."
+    # ب. بناء تطبيق التلجرام
+    application = Application.builder().token(config.BOT_TOKEN).build()
+
+    # ج. تسجيل المعالجات
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CallbackQueryHandler(handle_callback))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    # د. تشغيل سيرفر استقبال إشارات TradingView (الويب هوك)
+    asyncio.create_task(web_server.start_server())
+
+    # هـ. تشغيل خاصية Keep Alive لمنع خمول السيرفر
+    asyncio.create_task(services.keep_alive())
+
+    # و. إطلاق البوت
+    logger.info("🚀 النظام يعمل الآن بكامل خصائصه...")
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
     
-    if not entities:
-        return "⚠️ لا توجد قنوات مرتبطة."
+    # ضمان بقاء السيرفر يعمل بشكل مستمر
+    await asyncio.Event().wait()
 
-    txt = "🌐 <b>روابط الويب هوك الخاصة بك:</b>\n\n"
-    for e in entities:
-        eid = e['entity_id']
-        ename = e.get('entity_name') or 'قناة غير مسمية'
-        url = f"{domain}/webhook/{token}/{eid}"
-        txt += f"📍 {ename}:\n<code>{url}</code>\n\n"
-    
-    txt += "✅ <i>انسخ الرابط المناسب وضعه في TradingView.</i>"
-    return txt
+if __name__ == '__main__':
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("🛑 تم إيقاف النظام.")
