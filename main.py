@@ -91,13 +91,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await query.answer("⚠️ للمالك فقط", show_alert=True)
 
-    elif data == 'adm_g': # توليد كود
+        elif data == 'adm_g': # توليد كود يبدأ بـ SMO-
         if int(uid) == int(config.ADMIN_ID):
-            new_code = secrets.token_hex(4).upper()
+            # توليد الجزء العشوائي (8 رموز)
+            random_part = secrets.token_hex(4).upper()
+            # إضافة البادئة المطلوبة
+            new_code = f"SMO-{random_part}"
+            
+            # إرسال الكود للدالة في database.py
             if database.add_subscription_code(new_code, 30):
-                await query.message.reply_text(f"🎫 <b>كود جديد:</b>\n<code>{new_code}</code>", parse_mode='HTML')
+                await query.message.reply_text(
+                    f"🎫 <b>تم توليد كود جديد:</b>\n<code>{new_code}</code>", 
+                    parse_mode='HTML'
+                )
             else:
-                await query.answer("❌ فشل الإنشاء")
+                await query.answer("❌ فشل حفظ الكود في القاعدة")
+
 
     elif data == 'adm_s': # إحصائيات مفصلة
         if int(uid) == int(config.ADMIN_ID):
