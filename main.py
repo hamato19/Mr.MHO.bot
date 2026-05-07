@@ -11,7 +11,7 @@ import services
 import keyboards
 import web_server
 
-# إعداد السجلات لمراقبة أداء السيرفر في Render
+# إعداد السجلات
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
@@ -20,27 +20,27 @@ logger = logging.getLogger(__name__)
 # --- 1. الدالة الرئيسية عند بدء البوت /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    # إنشاء ملف للمستخدم في قاعدة البيانات إن لم يوجد
     services.initialize_user(uid)
     
-    user = services.get_user_data(uid)
+    # جلب يوزر البوت تلقائياً لرابط إضافة المشرف
+    bot_info = await context.bot.get_me()
+    
+    # استخدام الدالة async من ملف keyboards.py الجديد
+    markup = await keyboards.get_main_menu(uid, bot_info.username)
     
     welcome_text = (
         "👋 <b>مرحباً بك في منظومة سمو الأرقام (Mr. MOH)</b>\n\n"
-        "هذا البوت هو جسرك لربط إشارات <b>TradingView</b> مباشرة بقنواتك.\n\n"
-        "🚀 <b>كيف تبدأ؟</b>\n"
-        "1. أضف البوت مشرفاً في قناتك.\n"
-        "2. اربط القناة من قسم 'قنواتي'.\n"
-        "3. انسخ رابط الويب هوك وضعه في تنبيهات المنصة."
+        "هذا البوت يربط إشارات <b>TradingView</b> مباشرة بقنواتك.\n\n"
+        "استخدم القائمة أدناه لإدارة حسابك وروابط الويب هوك."
     )
     
     await update.message.reply_text(
         welcome_text,
         parse_mode='HTML',
-        reply_markup=keyboards.get_main_keyboard(user)
+        reply_markup=markup
     )
 
-# --- 2. معالج الأزرار التفاعلية (Callback Queries) ---
+# --- 2. معالج الأزرار التفاعلية (تم تحديث الـ Callback لتطابق الكيبورد الجديد) ---
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
@@ -48,95 +48,92 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.answer()
 
-    # --- قسم الويب هوك وتوليد الإشارات ---
-    if data == 'view_webhooks':
+    # --- روابط الويب هوك (view_wh) ---
+    if data == 'view_wh':
         msg_text = services.format_webhook_links(uid)
-        await query.edit_message_text(msg_text, parse_mode='HTML', reply_markup=keyboards.get_webhook_keyboard())
+        await query.edit_message_text(msg_text, parse_mode='HTML', reply_markup=keyboards.get_back_to_home())
 
-    elif data == 'gen_new_token':
-        # توليد رمز أمان جديد وتحديث روابط الإشارة فوراً
+    # --- تحديث الرمز (gen_token) ---
+    elif data == 'gen_token':
         new_token = secrets.token_hex(8)
         services.update_user_token(uid, new_token)
         msg_text = services.format_webhook_links(uid)
         await query.edit_message_text(
             f"✅ <b>تم تحديث رمز الأمان بنجاح!</b>\n\n{msg_text}",
             parse_mode='HTML',
-            reply_markup=keyboards.get_webhook_keyboard()
+            reply_markup=keyboards.get_back_to_home()
         )
 
-    # --- قسم قنواتي وإدارة الربط ---
-    elif data == 'my_channels':
-        msg_text = services.format_my_entities(uid)
-        await query.edit_message_text(msg_text, parse_mode='HTML', reply_markup=keyboards.get_channels_management_keyboard())
-
-    # --- لوحة تحكم المالك (خاصة بـ فهد بن محمد) ---
-    elif data == 'admin_panel':
-        if uid == config.ADMIN_ID:
-            u_count, c_count = services.get_admin_stats()
-            admin_msg = (
-                f"🛡️ <b>لوحة تحكم المالك</b>\n"
-                f"━━━━━━━━━━━━━━\n"
-                f"👥 المستخدمين: {u_count}\n"
-                f"🎫 أكواد التفعيل: {c_count}\n"
-                f"⚙️ الحالة: متصل (Online)"
-            )
-            await query.edit_message_text(admin_msg, parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
-        else:
-            await query.answer("⚠️ صلاحية المالك مطلوبة.", show_alert=True)
-
-    # --- العودة للوحة التحكم الرئيسية ---
-    elif data == 'back_to_home':
+    # --- حسابي (acc) ---
+    elif data == 'acc':
         user = services.get_user_data(uid)
-        expiry_info = services.get_time_remaining(user['expiry_date'])
-        status = "✅ مفعل" if services.is_user_active(user) else "❌ غير مفعل"
-        
-        home_text = (
-            f"🏠 <b>لوحة التحكم | سمو الأرقام</b>\n"
-            f"━━━━━━━━━━━━━━\n"
-            f"👤 المعرف: <code>{uid}</code>\n"
-            f"🚦 الاشتراك: {status}\n"
-            f"⏳ المتبقي: {expiry_info}\n"
-            f"🔑 الرمز: <code>{user['secret_token']}</code>"
-        )
-        await query.edit_message_text(home_text, parse_mode='HTML', reply_markup=keyboards.get_main_keyboard(user))
+        if user:
+            status = "✅ مفعل" if services.is_user_active(user) else "❌ غير مفعل"
+            expiry = services.get_time_remaining(user.get('expiry_date'))
+            acc_text = (
+                f"👤 <b>بيانات حسابك:</b>\n\n"
+                f"🆔 معرفك: <code>{uid}</code>\n"
+                f"🚦 الحالة: {status}\n"
+                f"⏳ المتبقي: {expiry}\n"
+                f"🔑 الرمز الحالي: <code>{user.get('secret_token')}</code>"
+            )
+            await query.edit_message_text(acc_text, parse_mode='HTML', reply_markup=keyboards.get_back_to_home())
 
-# --- 3. معالج الرسائل (لتفعيل الأكواد) ---
+    # --- قنواتي (view_chs) ---
+    elif data == 'view_chs':
+        entities = services.get_user_entities(uid)
+        markup = keyboards.get_entities_keyboard(entities)
+        await query.edit_message_text("📺 <b>قنواتك المرتبطة:</b>\n(اضغط على اسم القناة لحذف الربط)", parse_mode='HTML', reply_markup=markup)
+
+    # --- تجديد الاشتراك / إدخال كود (renew_sub) ---
+    elif data == 'renew_sub':
+        await query.edit_message_text(
+            "📩 من فضلك أرسل كود التفعيل الآن في رسالة نصية:",
+            reply_markup=keyboards.get_back_to_home()
+        )
+        context.user_data['awaiting_code'] = True
+
+    # --- لوحة التحكم للأدمن (admin_panel) ---
+    elif data == 'admin_panel':
+        if int(uid) == config.ADMIN_ID:
+            await query.edit_message_text("👮 <b>لوحة تحكم الأدمن</b>", parse_mode='HTML', reply_markup=keyboards.get_admin_main_keyboard())
+        else:
+            await query.answer("⚠️ عذراً، هذه الصلاحية للمالك فقط.", show_alert=True)
+
+    # --- العودة للقائمة الرئيسية (home) ---
+    elif data == 'home':
+        bot_info = await context.bot.get_me()
+        markup = await keyboards.get_main_menu(uid, bot_info.username)
+        await query.edit_message_text("🏠 <b>القائمة الرئيسية:</b>", parse_mode='HTML', reply_markup=markup)
+
+# --- 3. معالج الرسائل ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    text = update.message.text
-
-    # إذا كان المستخدم في حالة انتظار لإدخال كود
     if context.user_data.get('awaiting_code'):
-        success, message = services.redeem_code(uid, text)
+        success, message = services.redeem_code(uid, update.message.text)
         context.user_data['awaiting_code'] = False
-        await update.message.reply_text(message, reply_markup=keyboards.get_main_keyboard(services.get_user_data(uid)))
+        # جلب بيانات المستخدم المحدثة لعرض المنيو
+        user = services.get_user_data(uid)
+        bot_info = await context.bot.get_me()
+        markup = await keyboards.get_main_menu(uid, bot_info.username)
+        await update.message.reply_text(message, reply_markup=markup)
 
-# --- 4. الدالة الرئيسية لتشغيل المنظومة ---
+# --- 4. تشغيل المنظومة ---
 async def main():
-    # أ. تهيئة قاعدة البيانات
     database.init_db()
-
-    # ب. بناء تطبيق التلجرام
     application = Application.builder().token(config.BOT_TOKEN).build()
 
-    # ج. تسجيل المعالجات
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # د. تشغيل سيرفر استقبال إشارات TradingView (الويب هوك)
     asyncio.create_task(web_server.start_server())
-
-    # هـ. تشغيل خاصية Keep Alive لمنع خمول السيرفر
     asyncio.create_task(services.keep_alive())
 
-    # و. إطلاق البوت
     logger.info("🚀 النظام يعمل الآن بكامل خصائصه...")
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
-    
-    # ضمان بقاء السيرفر يعمل بشكل مستمر
     await asyncio.Event().wait()
 
 if __name__ == '__main__':
