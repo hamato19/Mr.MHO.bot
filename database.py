@@ -6,15 +6,14 @@ import secrets
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
-# إعدادات التسجيل لمتابعة العمليات على السيرفر
+# إعدادات التسجيل
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 @contextmanager
 def get_db():
-    """إنشاء اتصال بقاعدة البيانات مع ضمان الإغلاق التلقائي"""
+    """إنشاء اتصال بقاعدة البيانات مع ضمان الإغلاق التلقائي - الأفضل للسرعة والأمان"""
     conn = None
     try:
-        # الاتصال باستخدام الرابط المخزن في ملف الإعدادات (Neon DB)
         conn = psycopg2.connect(config.DATABASE_URL, sslmode='require')
         yield conn
     except Exception as e:
@@ -27,10 +26,9 @@ def get_db():
             if not conn.closed:
                 conn.close()
 
-# --- 1. دوال التهيئة (Initialization) ---
-
+# --- 1. التهيئة ---
 def init_db():
-    """دالة لتهيئة الجداول، تستدعى عند بدء تشغيل main.py"""
+    """تهيئة الجداول عند بدء التشغيل"""
     try:
         from init_db import initialize_database
         initialize_database()
@@ -38,29 +36,37 @@ def init_db():
     except Exception as e:
         logging.error(f"❌ فشل في تهيئة الجداول: {e}")
 
-# --- 2. دوال إدارة المستخدمين (Users Management) ---
+# --- 2. إدارة المستخدمين (Users Management) ---
 
 def get_admin_dashboard_stats():
-    """جلب إحصائيات لوحة التحكم للأدمن"""
+    """جلب إحصائيات لوحة التحكم للأدمن (تحسين الأداء باستخدام استعلام واحد)"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM users")
-                total_users = cur.fetchone()[0]
-                
-                cur.execute("SELECT COUNT(*) FROM users WHERE is_activated = TRUE")
-                active_users = cur.fetchone()[0]
-                
-                cur.execute("SELECT COUNT(*) FROM activation_codes WHERE is_used = FALSE")
-                available_codes = cur.fetchone()[0]
-                
-                return total_users, active_users, available_codes
+                cur.execute("""
+                    SELECT 
+                        (SELECT COUNT(*) FROM users) as total,
+                        (SELECT COUNT(*) FROM users WHERE is_activated = TRUE) as active,
+                        (SELECT COUNT(*) FROM activation_codes WHERE is_used = FALSE) as codes
+                """)
+                return cur.fetchone()
     except Exception as e:
         logging.error(f"Error fetching stats: {e}")
         return 0, 0, 0
 
+def get_all_users():
+    """جلب كافة المستخدمين المسجلين مع ترتيب الأحدث أولاً (إدارة المستخدمين)"""
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT user_id, is_activated, expiry_date FROM users ORDER BY id DESC LIMIT 50")
+                return cur.fetchall()
+    except Exception as e:
+        logging.error(f"Error fetching users: {e}")
+        return []
+
 def register_user_if_not_exists(user_id):
-    """تسجيل مستخدم جديد تلقائياً عند أول تواصل"""
+    """تسجيل مستخدم جديد تلقائياً"""
     secret_token = secrets.token_urlsafe(24)
     try:
         with get_db() as conn:
@@ -75,7 +81,7 @@ def register_user_if_not_exists(user_id):
         logging.error(f"Error registering user: {e}")
 
 def get_user_profile(user_id):
-    """جلب بيانات حساب المستخدم بالكامل"""
+    """جلب بيانات حساب المستخدم"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -85,10 +91,10 @@ def get_user_profile(user_id):
         logging.error(f"Error fetching profile: {e}")
         return None
 
-# --- 3. إدارة الرموز والويب هوك (Tokens) ---
+# --- 3. إدارة الرموز والويب هوك ---
 
 def update_user_secret_token(user_id):
-    """تحديث التوكن السري للمستخدم (عند طلب توليد رمز جديد)"""
+    """تحديث التوكن السري للمستخدم"""
     new_token = secrets.token_urlsafe(24)
     try:
         with get_db() as conn:
@@ -100,10 +106,10 @@ def update_user_secret_token(user_id):
         logging.error(f"Error updating token: {e}")
         return None
 
-# --- 4. إدارة القنوات والمجموعات (Entities) ---
+# --- 4. إدارة القنوات (Entities) ---
 
 def add_entity(user_id, entity_id, entity_name):
-    """ربط قناة أو مجموعة جديدة لقائمة المستخدم"""
+    """ربط قناة أو مجموعة جديدة"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -119,11 +125,11 @@ def add_entity(user_id, entity_id, entity_name):
         return False
 
 def get_user_entities(user_id):
-    """جلب كافة القنوات المرتبطة بالمستخدم"""
+    """جلب القنوات المرتبطة (تحسين السرعة باستخدام الـ ID فقط)"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT * FROM entities WHERE user_id = %s", (str(user_id),))
+                cur.execute("SELECT entity_id, entity_name FROM entities WHERE user_id = %s", (str(user_id),))
                 return cur.fetchall()
     except Exception as e:
         logging.error(f"Error fetching entities: {e}")
@@ -141,18 +147,21 @@ def delete_entity(user_id, entity_id):
         logging.error(f"Error deleting entity: {e}")
         return False
 
-# --- 5. نظام التفعيل (Activation) ---
+# --- 5. نظام التفعيل وتوليد الأكواد (Activation & Codes) ---
 
-def create_activation_code(code, days):
-    """إنشاء كود تفعيل جديد من قبل الأدمن"""
+def add_subscription_code(code, days=30):
+    """إضافة كود اشتراك جديد بمدة محددة (توليد الأكواد)"""
     try:
-        with get_db() as conn:
+        with get_db() as conn: # استخدام get_db الموحد لضمان الاستقرار
             with conn.cursor() as cur:
-                cur.execute("INSERT INTO activation_codes (code, days) VALUES (%s, %s)", (code, days))
+                cur.execute(
+                    "INSERT INTO activation_codes (code, days, is_used) VALUES (%s, %s, FALSE)",
+                    (code, days)
+                )
                 conn.commit()
                 return True
     except Exception as e:
-        logging.error(f"Error creating code: {e}")
+        logging.error(f"❌ Error in add_subscription_code: {e}")
         return False
 
 def activate_user_with_code(user_id, code):
@@ -167,6 +176,7 @@ def activate_user_with_code(user_id, code):
                     return False, "⚠️ الكود غير صالح أو مستخدم مسبقاً."
                 
                 days = code_data['days']
+                # حساب تاريخ الانتهاء بناءً على التاريخ الحالي
                 expiry_date = datetime.now() + timedelta(days=days)
                 
                 cur.execute("""
