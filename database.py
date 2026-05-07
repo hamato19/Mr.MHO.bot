@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 @contextmanager
 def get_db():
-    """إنشاء اتصال بقاعدة البيانات مع ضمان الإغلاق التلقائي - الأفضل للسرعة والأمان"""
+    """إنشاء اتصال بقاعدة البيانات مع ضمان الإغلاق التلقائي"""
     conn = None
     try:
         conn = psycopg2.connect(config.DATABASE_URL, sslmode='require')
@@ -39,7 +39,7 @@ def init_db():
 # --- 2. إدارة المستخدمين (Users Management) ---
 
 def get_admin_dashboard_stats():
-    """جلب إحصائيات لوحة التحكم للأدمن (تحسين الأداء باستخدام استعلام واحد)"""
+    """جلب إحصائيات لوحة التحكم للأدمن باستعلام واحد سريع"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -55,11 +55,11 @@ def get_admin_dashboard_stats():
         return 0, 0, 0
 
 def get_all_users():
-    """جلب كافة المستخدمين المسجلين مع ترتيب الأحدث أولاً (إدارة المستخدمين)"""
+    """جلب كافة المستخدمين المسجلين (إدارة المستخدمين)"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT user_id, is_activated, expiry_date FROM users ORDER BY id DESC LIMIT 50")
+                cur.execute("SELECT user_id, is_activated, expiry_date FROM users ORDER BY id DESC LIMIT 20")
                 return cur.fetchall()
     except Exception as e:
         logging.error(f"Error fetching users: {e}")
@@ -125,7 +125,7 @@ def add_entity(user_id, entity_id, entity_name):
         return False
 
 def get_user_entities(user_id):
-    """جلب القنوات المرتبطة (تحسين السرعة باستخدام الـ ID فقط)"""
+    """جلب القنوات المرتبطة"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -147,12 +147,12 @@ def delete_entity(user_id, entity_id):
         logging.error(f"Error deleting entity: {e}")
         return False
 
-# --- 5. نظام التفعيل وتوليد الأكواد (Activation & Codes) ---
+# --- 5. نظام التفعيل وتوليد الأكواد (حل مشكلة AttributeError) ---
 
 def add_subscription_code(code, days=30):
-    """إضافة كود اشتراك جديد بمدة محددة (توليد الأكواد)"""
+    """توليد كود اشتراك جديد وحفظه في جدول activation_codes"""
     try:
-        with get_db() as conn: # استخدام get_db الموحد لضمان الاستقرار
+        with get_db() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO activation_codes (code, days, is_used) VALUES (%s, %s, FALSE)",
@@ -176,7 +176,6 @@ def activate_user_with_code(user_id, code):
                     return False, "⚠️ الكود غير صالح أو مستخدم مسبقاً."
                 
                 days = code_data['days']
-                # حساب تاريخ الانتهاء بناءً على التاريخ الحالي
                 expiry_date = datetime.now() + timedelta(days=days)
                 
                 cur.execute("""
