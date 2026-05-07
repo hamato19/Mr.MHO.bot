@@ -38,7 +38,7 @@ async def show_webhook_links(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return await update.callback_query.edit_message_text("⚠️ <b>اربط قناة أولاً!</b>", 
             parse_mode=ParseMode.HTML, reply_markup=keyboards.get_back_to_home())
     
-    base_url = getattr(config, 'WEBHOOK_BASE_URL', 'https://servernet.ct.ws')
+    base_url = getattr(config, 'WEBHOOK_BASE_URL', 'https://mr-mho-bot-hewc.onrender.com')
     msg = "🌐 <b>روابط الويب هوك:</b>\n\n"
     for e in ents:
         msg += f"📺 قناة: <code>{e['entity_id']}</code>\n🔗 <code>{base_url}/webhook/{user['secret_token']}/{e['entity_id']}</code>\n\n"
