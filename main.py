@@ -26,7 +26,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     user = database.get_user_profile(uid)
     
-    # التحقق من الحظر أولاً (قبل أي إجراء)
+    # التحقق من الحظر أولاً
     blocked, hours_left, level = security.is_user_blocked(uid)
     if blocked:
         msg = f"🚫 حسابك موقف حالياً. يرجى الانتظار <code>{hours_left}</code> ساعة."
@@ -34,7 +34,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, parse_mode='HTML')
         return
 
-    # 1️⃣ فحص الموافقة على الخصوصية
+    # 1️⃣ فحص الموافقة على الخصوصية (المرحلة الأولى)
     if not user:
         await update.message.reply_text(
             privacy_policy.DISCLAIMER_TEXT, 
@@ -45,7 +45,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     is_admin = (int(uid) == int(config.ADMIN_ID))
 
-    # 2️⃣ فحص التفعيل الإجباري
+    # 2️⃣ فحص التفعيل الإجباري (المرحلة الثانية)
     if not user.get('is_activated') and not is_admin:
         await update.message.reply_text(
             "⚠️ <b>تنبيه: الحساب غير مفعل</b>\n\nيرجى إرسال كود التفعيل (مثال: <code>SMO-366EDDDC</code>):",
@@ -55,7 +55,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['awaiting_code'] = True
         return
 
-    # 3️⃣ الدخول للقائمة الرئيسية
+    # 3️⃣ الدخول للقائمة الرئيسية (المرحلة الثالثة)
     bot_info = await context.bot.get_me()
     markup = await keyboards.get_main_menu(uid, bot_info.username)
     welcome_text = (
@@ -73,11 +73,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: await query.answer()
     except: pass
 
-    # منع المحظورين من استخدام الأزرار
+    # منع المحظورين
     blocked, _, _ = security.is_user_blocked(uid)
     if blocked: return
 
-    # أزرار الخصوصية (متاحة للجميع)
+    # أزرار الخصوصية
     if data == 'view_priv':
         await query.edit_message_text(privacy_policy.PRIVACY_TEXT, parse_mode='HTML', reply_markup=keyboards.get_back_to_tos())
         return
@@ -86,20 +86,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     elif data == 'accept_tos':
         database.register_user_if_not_exists(uid)
-        # بعد القبول، نوجهه لصفحة التفعيل
-        user = database.get_user_profile(uid)
         await query.edit_message_text("✅ تمت الموافقة. يرجى إرسال كود التفعيل الآن:", parse_mode='HTML', reply_markup=keyboards.get_subscription_options())
         context.user_data['awaiting_code'] = True
         return
 
-    # فحص التفعيل للأزرار الأخرى
+    # فحص التفعيل لبقية الأزرار
     user = database.get_user_profile(uid)
     is_admin = (int(uid) == int(config.ADMIN_ID))
     if not is_admin and (not user or not user.get('is_activated')):
         await query.answer("⚠️ عذراً، هذا القسم للمشتركين فقط!", show_alert=True)
         return
 
-    # الأزرار الوظيفية
     if data == 'home':
         bot_info = await context.bot.get_me()
         markup = await keyboards.get_main_menu(uid, bot_info.username)
@@ -115,34 +112,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         acc_text = f"👤 <b>بيانات حسابك:</b>\n\n🆔 معرفك: <code>{uid}</code>\n🚦 الحالة: {status}\n⏳ المتبقي: {expiry}"
         await query.edit_message_text(acc_text, parse_mode='HTML', reply_markup=keyboards.get_back_home())
 
-    # لوحة التحكم (أدمن فقط)
     elif data == 'adm' and is_admin:
         total_u, active_u, codes = database.get_admin_dashboard_stats()
-        admin_text = f"👮 <b>لوحة التحكم</b>\n\n👥 المستخدمين: {total_u}\n✅ النشطين: {active_u}\n🎫 الأكواد المتوفرة: {codes}"
+        admin_text = f"👮 <b>لوحة التحكم</b>\n\n👥 المستخدمين: {total_u}\n✅ النشطين: {active_u}\n🎫 الأكواد: {codes}"
         await query.edit_message_text(admin_text, parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
 
-    elif data == 'adm_gen_menu' and is_admin:
-        await query.edit_message_text("🗓️ <b>توليد كود اشتراك جديد:</b>", parse_mode='HTML', reply_markup=keyboards.get_generation_menu())
-
-    elif data.startswith('gen_') and is_admin:
-        days = int(data.split('_')[1])
-        new_code = f"SMO-{secrets.token_hex(4).upper()}"
-        if database.add_subscription_code(new_code, days):
-            await query.message.reply_text(f"🎫 <b>تم التوليد بنجاح:</b>\n<code>{new_code}</code>\nالصلاحية: {days} يوم", parse_mode='HTML')
-
-# --- 3. معالج الرسائل ---
+# --- 3. معالج الرسائل وتفعيل الأكواد ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.text: return
     uid = update.effective_user.id
     raw_text = update.message.text
 
-    # نظام الحماية والتفعيل
+    # نظام الحماية والتفعيل (القفل الصارم)
     if context.user_data.get('awaiting_code'):
-        # دالة process_security_check تتولى (الفحص، الحظر، التفعيل، وتنبيه الأدمن)
+        # استدعاء دالة الفحص الأمني من security.py
         await security.process_security_check(update, context, uid, raw_text)
         return
-
-    # أي رسائل أخرى بعد التفعيل يمكن معالجتها هنا
 
 # --- 4. معالج ربط القنوات (Chat Shared) ---
 async def handle_chat_shared(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -154,23 +139,25 @@ async def handle_chat_shared(update: Update, context: ContextTypes.DEFAULT_TYPE)
             if database.add_entity(uid, str(channel_id), chat_info.title):
                 await update.message.reply_text(f"✅ تم ربط القناة بنجاح: <b>{chat_info.title}</b>", parse_mode='HTML', reply_markup=ReplyKeyboardRemove())
         except:
-            await update.message.reply_text("❌ فشل الربط. تأكد أن البوت "أدمن" في القناة.", reply_markup=ReplyKeyboardRemove())
+            # تصحيح علامات التنصيص هنا لضمان عمل الملف في Render
+            await update.message.reply_text("❌ فشل الربط. تأكد أن البوت 'أدمن' في القناة.", reply_markup=ReplyKeyboardRemove())
 
-# --- 5. الإقلاع ---
+# --- 5. الإقلاع والتشغيل ---
 async def main():
     database.init_db()
     app = Application.builder().token(config.BOT_TOKEN).build()
     
+    # الأوامر والرسائل
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(MessageHandler(filters.StatusUpdate.CHAT_SHARED, handle_chat_shared))
     
-    # تشغيل الخدمات الخلفية
+    # المهام الخلفية
     asyncio.create_task(web_server.start_server())
     asyncio.create_task(services.keep_alive())
     
-    logger.info("🚀 نظام سمو الأرقام (النسخة الاحترافية) انطلق...")
+    logger.info("🚀 منظومة سمو الأرقام جاهزة وتعمل بنظام الحماية...")
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
