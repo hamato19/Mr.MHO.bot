@@ -119,3 +119,25 @@ def get_all_users():
         print(f"❌ خطأ: {e}")
         return []
 
+
+
+def get_users_management_keyboard(users):
+    """تحويل قائمة المستخدمين إلى أزرار تفاعلية"""
+    keyboard = []
+    
+    for user in users:
+        # استخدام user_id لأننا قمنا بتعديله في قاعدة البيانات
+        uid = user['user_id']
+        # تحديد رمز الحالة (مفعل أو غير مفعل)
+        status_icon = "🟢" if user.get('is_activated') else "🔴"
+        
+        # نص الزر يظهر المعرف والحالة
+        button_text = f"{status_icon} ID: {uid}"
+        
+        # عند الضغط على الزر، يرسل أمر لعرض تفاصيل هذا المستخدم تحديداً
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"usr_{uid}")])
+    
+    # إضافة زر العودة للقائمة الرئيسية للإدارة
+    keyboard.append([InlineKeyboardButton("⬅️ عودة للخلف", callback_data="admin_main")])
+    
+    return InlineKeyboardMarkup(keyboard)
