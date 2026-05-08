@@ -56,12 +56,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: await query.answer()
     except: pass
 
-    # نظام حماية الحظر
     blocked, _, _ = security.is_user_blocked(uid)
     if blocked: return
 
     try:
-        # 1. قسم سياسة الخصوصية
+        # 1. إدارة الخصوصية والشروط
         if data in ['view_priv', 'back_tos', 'accept_tos', 'reject_tos']:
             if data == 'view_priv':
                 await query.edit_message_text(privacy_policy.PRIVACY_TEXT, parse_mode='HTML', reply_markup=keyboards.get_back_to_tos())
@@ -80,7 +79,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("⚠️ الاشتراك غير نشط!", show_alert=True)
             return
 
-        # 2. القائمة الرئيسية والويب هوك
+        # 2. الخدمات والويب هوك
         if data == 'home':
             await back_to_main_menu(query, context, uid)
         elif data == 'acc':
@@ -90,58 +89,46 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == 'wh':
             await query.edit_message_text(services.format_webhook_links(uid), parse_mode='HTML', reply_markup=keyboards.get_back_home())
         elif data == 'tok':
-            new_tok = secrets.token_hex(16)
-            if database.update_user_secret_token(uid): # تم التصحيح لاسم الدالة في database.py
-                await query.answer("✅ تم تحديث رمز الأمان بنجاح")
+            if database.update_user_secret_token(uid):
+                await query.answer("✅ تم تحديث رمز الأمان")
                 await query.edit_message_text("🔐 <b>تحديث أمني ناجح</b>\nلقد تم توليد رمز جديد بنجاح.", parse_mode='HTML', reply_markup=keyboards.get_back_home())
 
-        elif data == 'ren':
-            await query.edit_message_text("🎫 أرسل كود التفعيل الجديد:", reply_markup=keyboards.get_back_home())
-            context.user_data['awaiting_code'] = True
-        elif data == 'add_channel':
-            await query.message.reply_text("📢 اختر القناة المراد ربطها:", reply_markup=keyboards.get_request_channel_keyboard())
-        elif data == 'chs':
-            ents = database.get_user_entities(uid)
-            await query.edit_message_text("📋 <b>إدارة القنوات:</b>", parse_mode='HTML', reply_markup=keyboards.get_entities_keyboard(ents))
-
-        # 3. إدارة لوحة الأدمن (حصري للمالك)
+        # 3. لوحة تحكم المالك
         elif is_owner:
             if data == 'adm':
                 t, a, c = database.get_admin_dashboard_stats()
                 await query.edit_message_text(f"👮 <b>لوحة المالك</b>\n\n👥 الكل: {t} | ✅ النشط: {a}\n🎫 أكواد: {c}", parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
-            
             elif data == 'adm_u':
                 users = database.get_all_users()
-                if not users: await query.answer("📋 القائمة فارغة", show_alert=True)
+                if not users: await query.answer("📋 القائمة فارغة")
                 else: await query.edit_message_text("👥 <b>إدارة المستخدمين:</b>", parse_mode='HTML', reply_markup=keyboards.get_users_management_keyboard(users))
-
             elif data.startswith('view_u_'):
                 target_id = data.split('_')[2]
-                user_info = database.get_user_details(target_id)
-                if user_info:
-                    status = "✅ مفعل" if user_info['is_activated'] else "❌ معطل"
-                    expiry = user_info['expiry_date'] or "غير محدود"
-                    text = f"👤 <b>تفاصيل:</b>\n🆔 ID: <code>{target_id}</code>\n📊 الحالة: {status}\n📅 الانتهاء: {expiry}"
-                    await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboards.get_user_control_keyboard(target_id, user_info['is_activated']))
-
+                u_info = database.get_user_details(target_id)
+                if u_info:
+                    await query.edit_message_text(f"👤 تفاصيل ID: {target_id}", reply_markup=keyboards.get_user_control_keyboard(target_id, u_info['is_activated']))
             elif data.startswith('toggle_u_'):
-                parts = data.split('_')
-                action = parts[2]
-                target_uid = parts[3]
-                new_status = (action == 'activate')
-                if database.update_user_status(target_uid, new_status):
+                _, _, action, t_uid = data.split('_')
+                if database.update_user_status(t_uid, (action == 'activate')):
                     await query.answer("✅ تم التحديث")
                     users = database.get_all_users()
                     await query.edit_message_text("👥 <b>إدارة المستخدمين:</b>", parse_mode='HTML', reply_markup=keyboards.get_users_management_keyboard(users))
 
-            elif data.startswith('gen_'):
-                days = int(data.split('_')[1])
-                new_code = f"SMO-{secrets.token_hex(4).upper()}"
-                if database.add_subscription_code(new_code, days):
-                    await query.message.reply_text(f"🎫 كود جديد: <code>{new_code}</code>")
-
     except Exception as e:
-        logging.error(f"Callback Error: {e}")
+        logger.error(f"Callback Error: {e}")
         await query.answer("🔴 حدث خطأ أثناء المعالجة")
 
-# ... (باقي الدوال handle_message و handle_chat_shared و main تبقى كما هي)
+async def main():
+    database.init_db()
+    app = Application.builder().token(config.BOT_TOKEN).concurrent_updates(True).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(handle_callback))
+    # ... بقية الـ Handlers ...
+    asyncio.create_task(web_server.start_server())
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(drop_pending_updates=True)
+    await asyncio.Event().wait()
+
+if __name__ == '__main__':
+    asyncio.run(main())
