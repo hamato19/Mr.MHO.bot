@@ -126,31 +126,17 @@ def get_users_management_keyboard(users):
     keyboard = []
     
     for user in users:
-        # استخدام user_id لأننا قمنا بتعديله في قاعدة البيانات
         uid = user['user_id']
-        # تحديد رمز الحالة (مفعل أو غير مفعل)
         status_icon = "🟢" if user.get('is_activated') else "🔴"
-        
-        # نص الزر يظهر المعرف والحالة
         button_text = f"{status_icon} ID: {uid}"
         
-        # عند الضغط على الزر، يرسل أمر لعرض تفاصيل هذا المستخدم تحديداً
-        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"usr_{uid}")])
+        # التعديل هنا: نغير usr_ إلى view_u_ ليتطابق مع main.py
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_u_{uid}")])
     
-    # إضافة زر العودة للقائمة الرئيسية للإدارة
-    keyboard.append([InlineKeyboardButton("⬅️ عودة للخلف", callback_data="admin_main")])
+    # إضافة زر العودة بلوحة الأدمن
+    keyboard.append([InlineKeyboardButton("⬅️ عودة للخلف", callback_data="adm")])
     
     return InlineKeyboardMarkup(keyboard)
 
-def get_user_control_keyboard(user_id, is_activated):
-    # إذا كان مفعل نضع زر إيقاف، والعكس
-    txt = "🔴 إيقاف الحساب" if is_activated else "🟢 تفعيل الحساب"
-    act = "deactivate" if is_activated else "activate"
-    
-    kb = [
-        [InlineKeyboardButton(txt, callback_data=f"toggle_u_{act}_{user_id}")],
-        [InlineKeyboardButton("🔙 عودة للقائمة", callback_data="adm_u")]
-    ]
-    return InlineKeyboardMarkup(kb)
 
 
