@@ -46,25 +46,33 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: await query.answer()
     except: pass
 
-    # --- إدارة التنقل ---
+    # --- إدارة التنقل العام ---
     if data == 'home':
-        context.user_data['awaiting_code'] = False
+        context.user_data.clear()
         await clean_and_show_menu(query, context, uid)
         return
 
-    # --- الخصوصية والتفعيل ---
+    # --- سياسة الخصوصية والتفعيل ---
+    if data == 'view_priv':
+        await query.edit_message_text(privacy_policy.DISCLAIMER_TEXT, parse_mode='HTML', reply_markup=keyboards.get_disclaimer_keyboard())
+        return
+
     if data == 'accept_tos':
         database.register_user_if_not_exists(uid)
         await query.edit_message_text("✅ تم قبول الشروط.\nيرجى اختيار وسيلة التفعيل:", reply_markup=keyboards.get_subscription_options())
         return
+
+    if data == 'reject_tos':
+        await query.edit_message_text("❌ عذراً، لا يمكنك استخدام البوت دون الموافقة على الشروط.")
+        return
     
     if data == 'ren':
-        await query.edit_message_text("🔄 <b>تجديد أو تفعيل الاشتراك:</b>\n\nاختر الاشتراك عبر الموقع أو أدخل الكود مباشرة:", 
-                                      parse_mode='HTML', reply_markup=keyboards.get_subscription_options())
+        await query.edit_message_text("🔄 <b>تجديد أو تفعيل الاشتراك:</b>\n\nأرسل كود التفعيل المكون من 12 رقم وحرف:", 
+                                      parse_mode='HTML', reply_markup=keyboards.get_back_home())
         context.user_data['awaiting_code'] = True 
         return
 
-    # --- لوحة الأدمن ---
+    # --- لوحة التحكم للأدمن (is_owner) ---
     if is_owner:
         if data == 'adm':
             t, a, c = database.get_admin_dashboard_stats()
@@ -74,68 +82,104 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             users = database.get_all_users()
             await query.edit_message_text("👥 <b>إدارة المستخدمين:</b>", parse_mode='HTML', reply_markup=keyboards.get_users_management_keyboard(users))
         elif data == 'adm_gen_menu':
-            await query.edit_message_text("🔑 <b>توليد أكواد:</b>", parse_mode='HTML', reply_markup=keyboards.get_generation_menu())
+            await query.edit_message_text("🔑 <b>توليد أكواد:</b>\nاختر المدة المطلوبة:", parse_mode='HTML', reply_markup=keyboards.get_generation_menu())
+        
+        elif data.startswith('act_'):
+            target_id = data.replace('act_', '')
+            context.user_data['target_user_to_activate'] = target_id
+            context.user_data['awaiting_admin_code'] = True
+            await query.edit_message_text(f"🎫 <b>تفعيل المستخدم:</b> <code>{target_id}</code>\nأرسل الآن الكود لتخصيصه له:", 
+                                          parse_mode='HTML', reply_markup=keyboards.get_back_home())
+
+        elif data.startswith('del_u_'):
+            target_id = data.replace('del_u_', '')
+            database.delete_user_completely(target_id)
+            await query.answer("🗑️ تم حذف المستخدم نهائياً", show_alert=True)
+            users = database.get_all_users()
+            await query.edit_message_text("👥 <b>إدارة المستخدمين:</b>", parse_mode='HTML', reply_markup=keyboards.get_users_management_keyboard(users))
+
         elif data.startswith('gen_'):
             days = int(data.split('_')[1])
             code = f"SMO-{secrets.token_hex(3).upper()}"
             database.add_subscription_code(code, days)
-            await query.edit_message_text(f"✅ <b>تم توليد كود جديد:</b>\n\nالمدة: {days} يوم\nالكود: <code>{code}</code>", 
+            await query.edit_message_text(f"✅ <b>تم توليد كود ({days} يوم):</b>\n\n<code>{code}</code>", 
                                           parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
+        
         elif data.startswith('view_u_'):
             target_id = data.replace('view_u_', '')
             u_details = database.get_user_profile(target_id)
             await query.edit_message_text(f"👤 <b>إدارة المستخدم:</b> <code>{target_id}</code>\nالحالة: {'نشط ✅' if u_details['is_activated'] else 'معطل ❌'}", 
                                           parse_mode='HTML', reply_markup=keyboards.get_user_control_keyboard(target_id, u_details['is_activated']))
-        if data in ['adm', 'adm_u', 'adm_gen_menu'] or data.startswith(('gen_', 'view_u_', 'toggle_u_')): return
+        
+        if data in ['adm', 'adm_u', 'adm_gen_menu'] or data.startswith(('gen_', 'view_u_', 'act_', 'del_u_')): return
 
-    # --- العمليات الأساسية للمشتركين ---
+    # --- العمليات الأساسية (للمشتركين والأدمن) ---
     if is_owner or (user and user.get('is_activated')):
-        # 1. إضافة قناة (رسالة جديدة لطلب الكيبورد)
         if data == 'add_channel':
-            await query.message.reply_text("📢 اضغط على الزر أدناه لاختيار القناة لربطها  عبر الـ ID:", 
-                                           reply_markup=keyboards.get_request_channel_keyboard())
+            await query.message.reply_text("📢 اضغط الزر أدناه لاختيار القناة لربطها:", reply_markup=keyboards.get_request_channel_keyboard())
             try: await query.delete_message()
             except: pass
 
-        # 2. عرض قنواتي (تعديل الرسالة الحالية)
         elif data == 'chs':
             ents = database.get_user_entities(uid)
-            await query.edit_message_text(
-                "📋 <b>قنواتك المرتبطة (ID):</b>\n\nيتم الربط بالمعرف الرقمي لثبات الخدمة.",
-                parse_mode='HTML', 
-                reply_markup=keyboards.get_entities_keyboard(ents)
-            )
+            await query.edit_message_text("📋 <b>قنواتك المرتبطة (ID):</b>", parse_mode='HTML', reply_markup=keyboards.get_entities_keyboard(ents))
 
-        # 3. بقية الأزرار (ويب هوك، توكن، حسابي)
         elif data == 'wh':
             webhook_text = services.format_webhook_links(uid)
-            await query.edit_message_text(f"🌐 <b>روابط الويب هوك الخاصة بك:</b>\n\n<code>{webhook_text}</code>", 
-                                          parse_mode='HTML', reply_markup=keyboards.get_back_home())
+            await query.edit_message_text(f"🌐 <b>روابط الويب هوك:</b>\n\n<code>{webhook_text}</code>", parse_mode='HTML', reply_markup=keyboards.get_back_home())
+        
         elif data == 'tok':
             database.update_user_secret_token(uid)
-            await query.edit_message_text("🔄 <b>تم تحديث رمز الأمان بنجاح!</b>", 
-                                          parse_mode='HTML', reply_markup=keyboards.get_back_home())
+            await query.edit_message_text("🔄 <b>تم تحديث رمز الأمان بنجاح!</b>", parse_mode='HTML', reply_markup=keyboards.get_back_home())
+            
         elif data == 'acc':
-            expiry = services.get_time_remaining(user.get('expiry_date'))
-            await query.edit_message_text(f"👤 <b>بيانات حسابك:</b>\n🆔 ID: <code>{uid}</code>\n⏳ الصلاحية: {expiry}", 
-                                          parse_mode='HTML', reply_markup=keyboards.get_back_home())
+            expiry = services.get_time_remaining(user.get('expiry_date')) if user else "غير محدد"
+            await query.edit_message_text(f"👤 <b>بيانات حسابك:</b>\n🆔 ID: <code>{uid}</code>\n⏳ الصلاحية: {expiry}", parse_mode='HTML', reply_markup=keyboards.get_back_home())
+
+        # معالجة قنواتي (عرض وحذف)
+        elif data.startswith('v_'):
+            ch_id = data.replace('v_', '')
+            await query.answer(f"المعرف: {ch_id}", show_alert=True)
+            
+        elif data.startswith('d_'):
+            ch_id = data.replace('d_', '')
+            database.delete_user_entity(uid, ch_id)
+            await query.answer("✅ تم حذف القناة")
+            ents = database.get_user_entities(uid)
+            await query.edit_message_reply_markup(reply_markup=keyboards.get_entities_keyboard(ents))
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    text = update.message.text.strip() if update.message.text else ""
+
     if update.message.chat_shared:
         database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
         await update.message.reply_text("✅ تم ربط القناة بنجاح!", reply_markup=ReplyKeyboardRemove())
         await clean_and_show_menu(update, context, uid)
         return
-    if context.user_data.get('awaiting_code'):
-        days = database.check_and_use_code(update.message.text.strip())
+
+    # معالجة التفعيل (للأدمن وللمستخدم)
+    if context.user_data.get('awaiting_admin_code'):
+        target_uid = context.user_data.get('target_user_to_activate')
+        days = database.check_and_use_code(text)
         if days:
-            database.activate_user_subscription(uid, days)
-            context.user_data['awaiting_code'] = False
-            await update.message.reply_text(f"🎉 تم التفعيل لـ {days} يوم!")
+            database.activate_user_subscription(target_uid, days)
+            context.user_data.clear()
+            await update.message.reply_text(f"✅ تم تفعيل حساب <code>{target_uid}</code> بنجاح.")
             await clean_and_show_menu(update, context, uid)
         else:
-            await update.message.reply_text("❌ كود خاطئ. حاول مرة أخرى.")
+            await update.message.reply_text("❌ الكود غير صحيح.")
+        return
+
+    if context.user_data.get('awaiting_code'):
+        days = database.check_and_use_code(text)
+        if days:
+            database.activate_user_subscription(uid, days)
+            context.user_data.clear()
+            await update.message.reply_text(f"🎉 تم التفعيل بنجاح لـ {days} يوم!")
+            await clean_and_show_menu(update, context, uid)
+        else:
+            await update.message.reply_text("❌ الكود خاطئ.")
 
 async def main():
     database.init_db()
