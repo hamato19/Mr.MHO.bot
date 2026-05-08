@@ -127,6 +127,40 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elif data == 'adm_gen_menu':
             await query.edit_message_text("🗓️ <b>توليد كود:</b>", reply_markup=keyboards.get_generation_menu())
+        # --- الجزء الجديد لإدارة تفاصيل المستخدم وتغيير حالته ---
+        elif data.startswith('view_u_'):
+            user_id = int(data.split('_')[2])
+            user = database.get_user_details(user_id)
+            
+            if user:
+                status = "✅ مفعل" if user['is_activated'] else "❌ معطل"
+                expiry = user['expiry_date'] if user['expiry_date'] else "غير محدود"
+                
+                text = (
+                    f"👤 <b>تفاصيل المستخدم:</b>\n\n"
+                    f"🆔 <b>ID:</b> <code>{user['user_id']}</code>\n"
+                    f"📊 <b>الحالة:</b> {status}\n"
+                    f"📅 <b>تاريخ الانتهاء:</b> {expiry}\n"
+                )
+                # استدعاء كيبورد التحكم (تفعيل/إيقاف)
+                await query.edit_message_text(
+                    text, 
+                    parse_mode='HTML', 
+                    reply_markup=keyboards.get_user_control_keyboard(user_id, user['is_activated'])
+                )
+            else:
+                await query.answer("❌ تعذر جلب بيانات المستخدم", show_alert=True)
+
+        elif data.startswith('toggle_u_'):
+            # استخراج الأكشن (activate/deactivate) والآيدي
+            _, _, action, target_uid = data.split('_')
+            new_status = (action == 'activate')
+            
+            if database.update_user_status(target_uid, new_status):
+                await query.answer(f"✅ تم تحديث الحالة بنجاح", show_alert=True)
+                # العودة للقائمة الرئيسية للمستخدمين لتحديث العرض
+                users = database.get_all_users()
+                await query.edit_message_text("👥 <b>إدارة المستخدمين:</b>", parse_mode='HTML', reply_markup=keyboards.get_users_management_keyboard(users))
             
         elif data.startswith('gen_'):
             days = int(data.split('_')[1])
