@@ -88,18 +88,36 @@ def get_entities_keyboard(entities):
         kb.append([InlineKeyboardButton("❌ لا توجد قنوات مرتبطة", callback_data='none')])
     else:
         for ent in entities:
-            # ent[0] هو الـ entity_id من قاعدة البيانات (مثلاً: -1003948891464)
-            ch_id = ent[0] if isinstance(ent, (tuple, list)) else ent
-            
-            # تقصير callback_data: حرف 'v' للمعاينة، وحرف 'd' للحذف
-            kb.append([
-                InlineKeyboardButton(f"🆔 {ch_id}", callback_data=f"v_{ch_id}"),
-                InlineKeyboardButton("🗑️ حذف", callback_data=f"d_{ch_id}")
-            ])
+            try:
+                # 1. استخراج الـ ID والتأكد من أنه نص نظيف وقصير
+                if isinstance(ent, dict):
+                    raw_id = str(ent.get('entity_id', '0'))
+                else:
+                    raw_id = str(ent[0])
+                
+                # تنظيف الـ ID من أي مسافات أو رموز غريبة قد تزيد الحجم
+                clean_id = raw_id.strip()
+
+                # 2. نص الزر (يظهر للمستخدم) - نعرض الـ ID كاملاً هنا لأنه لا يسبب خطأ
+                button_text = f"🆔 {clean_id}"
+                
+                # 3. البيانات الخلفية (المشكلة هنا) - سنقتصر على أول 20 حرف فقط كإجراء احترازي
+                # تذكر: الحرف 'd_' يأخذ 2 بايت، والـ ID يأخذ الباقي
+                safe_callback_v = f"v_{clean_id}"[:60] 
+                safe_callback_d = f"d_{clean_id}"[:60]
+
+                kb.append([
+                    InlineKeyboardButton(button_text, callback_data=safe_callback_v),
+                    InlineKeyboardButton("🗑️ حذف", callback_data=safe_callback_d)
+                ])
+            except Exception as e:
+                logging.error(f"Error rendering button: {e}")
+                continue
 
     kb.append([InlineKeyboardButton("➕ إضافة قناة جديدة", callback_data='add_channel')])
-    kb.append(back_home_button())
+    kb.append([InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data='home')])
     return InlineKeyboardMarkup(kb)
+
 
 
 # 9. زر اختيار القناة
