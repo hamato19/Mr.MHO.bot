@@ -13,7 +13,7 @@ def get_disclaimer_keyboard():
         [InlineKeyboardButton("❌ رفض", callback_data='reject_tos')]
     ])
 
-# 2. واجهة التفعيل والتجديد (تعديل: زرين بجانب بعض)
+# 2. واجهة التفعيل والتجديد
 def get_subscription_options():
     return InlineKeyboardMarkup([
         [
@@ -44,11 +44,15 @@ def get_admin_keyboard():
         back_home_button()
     ])
 
-# 5. قائمة خيارات مدة الكود (للأدمن)
+# 5. قائمة خيارات مدة الكود (للأدمن) - تم إضافة الـ 5 أيام والـ 60 يوم
 def get_generation_menu():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🗓️ 30 يوم", callback_data='gen_30'),
+            InlineKeyboardButton("🎁 تجريبي (5 أيام)", callback_data='gen_5'),
+            InlineKeyboardButton("🗓️ 30 يوم", callback_data='gen_30')
+        ],
+        [
+            InlineKeyboardButton("🗓️ 60 يوم", callback_data='gen_60'),
             InlineKeyboardButton("🗓️ 90 يوم", callback_data='gen_90')
         ],
         [InlineKeyboardButton("🗓️ سنة كاملة (365 يوم)", callback_data='gen_365')],
@@ -56,7 +60,7 @@ def get_generation_menu():
         back_home_button()
     ])
 
-# 6. إدارة المستخدمين (قائمة ديناميكية)
+# 6. إدارة المستخدمين
 def get_users_management_keyboard(users):
     kb = []
     for user in users:
@@ -76,21 +80,29 @@ def get_user_control_keyboard(target_id, is_active):
         [InlineKeyboardButton("🔙 عودة", callback_data='adm_u')]
     ])
 
-# 8. إدارة القنوات (عرض وحذف)
+# 8. إدارة القنوات (بالـ ID فقط)
 def get_entities_keyboard(entities):
     kb = []
     if not entities:
         kb.append([InlineKeyboardButton("❌ لا توجد قنوات مرتبطة", callback_data='none')])
     else:
         for ent in entities:
+            ch_id = ent[0] if isinstance(ent, (tuple, list)) else ent
             kb.append([
-                InlineKeyboardButton(f"📺 {ent[1]}", callback_data=f"view_ch_{ent[0]}"),
-                InlineKeyboardButton("🗑️ حذف", callback_data=f"del_ch_{ent[0]}")
+                InlineKeyboardButton(f"🆔 {ch_id}", callback_data=f"view_ch_{ch_id}"),
+                InlineKeyboardButton("🗑️ حذف", callback_data=f"del_ch_{ch_id}")
             ])
     kb.append([InlineKeyboardButton("➕ إضافة قناة جديدة", callback_data='add_channel')])
     kb.append(back_home_button())
     return InlineKeyboardMarkup(kb)
 
-# 9. العودة السريعة
+# 9. زر اختيار القناة
+def get_request_channel_keyboard():
+    return ReplyKeyboardMarkup([
+        [KeyboardButton("📢 اختر القناة لربطها بالمنظومة", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))],
+        [KeyboardButton("🔙 إلغاء والعودة للقائمة")]
+    ], resize_keyboard=True, one_time_keyboard=True)
+
+# 10. العودة السريعة
 def get_back_home():
     return InlineKeyboardMarkup([back_home_button()])
