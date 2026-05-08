@@ -121,22 +121,19 @@ def get_all_users():
 
 
 
-def get_users_management_keyboard(users):
-    """تحويل قائمة المستخدمين إلى أزرار تفاعلية"""
-    keyboard = []
+def get_user_control_keyboard(target_id, is_active):
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     
-    for user in users:
-        uid = user['user_id']
-        status_icon = "🟢" if user.get('is_activated') else "🔴"
-        button_text = f"{status_icon} ID: {uid}"
-        
-        # التعديل هنا: نغير usr_ إلى view_u_ ليتطابق مع main.py
-        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"view_u_{uid}")])
+    # اختيار النص المناسب للزر بناءً على حالة المستخدم
+    toggle_text = "🚫 تعطيل الحساب" if is_active else "✅ تفعيل الحساب"
+    action = "deactivate" if is_active else "activate"
     
-    # إضافة زر العودة بلوحة الأدمن
-    keyboard.append([InlineKeyboardButton("⬅️ عودة للخلف", callback_data="adm")])
-    
+    keyboard = [
+        [InlineKeyboardButton(toggle_text, callback_query_data=f"toggle_u_{action}_{target_id}")],
+        [InlineKeyboardButton("🔙 عودة للقائمة", callback_query_data="adm_u")]
+    ]
     return InlineKeyboardMarkup(keyboard)
+
 
 
 
