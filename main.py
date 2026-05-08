@@ -128,9 +128,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == 'adm_gen_menu':
             await query.edit_message_text("🗓️ <b>توليد كود:</b>", reply_markup=keyboards.get_generation_menu())
         # --- الجزء الجديد لإدارة تفاصيل المستخدم وتغيير حالته ---
-        elif data.startswith('view_u_'):
-            user_id = int(data.split('_')[2])
+         elif data.startswith('view_u_'):
+            user_id = int(data.split('_')[2]) # خطر في حال تغيرت صيغة الـ callback
             user = database.get_user_details(user_id)
+            # ... باقي الكود ...
+
             
             if user:
                 status = "✅ مفعل" if user['is_activated'] else "❌ معطل"
