@@ -59,11 +59,13 @@ def get_all_users():
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT user_id, is_activated, expiry_date FROM users ORDER BY id DESC LIMIT 20")
+                # التعديل هنا: الترتيب بواسطة user_id بدلاً من id
+                cur.execute("SELECT user_id, is_activated, expiry_date FROM users ORDER BY user_id DESC LIMIT 20")
                 return cur.fetchall()
     except Exception as e:
         logging.error(f"Error fetching users: {e}")
         return []
+
 
 def register_user_if_not_exists(user_id):
     """تسجيل مستخدم جديد تلقائياً"""
