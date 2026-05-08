@@ -192,3 +192,12 @@ def activate_user_with_code(user_id, code):
     except Exception as e:
         logging.error(f"Error in activation: {e}")
         return False, "❌ حدث خطأ فني أثناء التفعيل."
+def get_user_details(user_id):
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT user_id, is_activated, expiry_date FROM users WHERE user_id = %s", (user_id,))
+                return cur.fetchone()
+    except Exception as e:
+        logging.error(f"Error fetching user details: {e}")
+        return None
