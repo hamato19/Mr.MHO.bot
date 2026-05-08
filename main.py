@@ -143,7 +143,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         elif data.startswith('d_'):
             ch_id = data.replace('d_', '')
-            database.delete_user_entity(uid, ch_id)
+            database.delete_entity(uid, ch_id)
             await query.answer("✅ تم حذف القناة")
             ents = database.get_user_entities(uid)
             await query.edit_message_reply_markup(reply_markup=keyboards.get_entities_keyboard(ents))
