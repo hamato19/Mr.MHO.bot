@@ -201,3 +201,18 @@ def get_user_details(user_id):
     except Exception as e:
         logging.error(f"Error fetching user details: {e}")
         return None
+
+def update_user_status(user_id, status):
+    """تحديث حالة المستخدم (تفعيل أو إيقاف) في قاعدة البيانات"""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE users SET is_activated = %s WHERE user_id = %s",
+                    (status, str(user_id))
+                )
+                conn.commit()
+                return True
+    except Exception as e:
+        logging.error(f"Error updating user status: {e}")
+        return False
