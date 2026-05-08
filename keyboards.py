@@ -1,10 +1,10 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, KeyboardButtonRequestChat
 import config
 
-# --- 1. أزرار الحماية والخصوصية (إجبارية للمستخدم الجديد) ---
+# --- 1. أزرار الحماية والخصوصية ---
 
 def get_disclaimer_keyboard():
-    """أزرار الموافقة على الشروط والسياسة مع خيار الرفض"""
+    """أزرار الموافقة على الشروط"""
     keyboard = [
         [InlineKeyboardButton("📜 عرض سياسة الخصوصية", callback_data='view_priv')],
         [
@@ -15,7 +15,7 @@ def get_disclaimer_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 def get_subscription_options():
-    """خيارات الاشتراك تظهر بعد الموافقة مباشرة"""
+    """خيارات الاشتراك والتفعيل"""
     keyboard = [
         [InlineKeyboardButton("🎫 إدخال كود التفعيل", callback_data='ren')],
         [InlineKeyboardButton("💳 الاشتراك الآن (تواصل مع الإدارة)", url=config.SUPPORT_LINK)]
@@ -23,31 +23,30 @@ def get_subscription_options():
     return InlineKeyboardMarkup(keyboard)
 
 def get_back_to_tos():
-    """العودة من عرض السياسة إلى خيار الموافقة والرفض"""
     keyboard = [[InlineKeyboardButton("⬅️ العودة للموافقة", callback_data='back_tos')]]
     return InlineKeyboardMarkup(keyboard)
 
 # --- 2. القوائم الرئيسية للمستخدم ---
 
 def get_back_home():
-    """زر العودة الموحد"""
     return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 عودة للرئيسية", callback_data='home')]])
 
 async def get_main_menu(uid, bot_username="bot"):
-    """القائمة الرئيسية للمشترك"""
+    """القائمة الرئيسية المربوطة بـ main.py"""
     kb = [
         [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🔄 تجديد الاشتراك", callback_data='ren')],
         [InlineKeyboardButton("📢 اضافة قناة", callback_data='add_channel'), InlineKeyboardButton("حذف /قنواتي", callback_data='chs')],
-        [InlineKeyboardButton("🌐 رابط الويب هوك", callback_data='wh'), InlineKeyboardButton("🔄 توليد رمز امان جديد", callback_data='tok')],
+        [InlineKeyboardButton("🌐 رابط الويب هوك", callback_data='wh'), InlineKeyboardButton("🔄 توليد رمز أمان", callback_data='tok')],
         [InlineKeyboardButton("🤖 إضافة البوت كمشرف", url=f"https://t.me/{bot_username}?startchannel=true")],
         [InlineKeyboardButton("☎️ الدعم الفني", url=config.SUPPORT_LINK)]
     ]
-    if int(uid) == int(config.ADMIN_ID):
+    # عرض زر لوحة الأدمن للمالك فقط
+    if str(uid) == str(config.ADMIN_ID):
         kb.append([InlineKeyboardButton("👮 لوحة الأدمن", callback_data='adm')])
     return InlineKeyboardMarkup(kb)
 
 def get_entities_keyboard(entities):
-    """عرض قائمة القنوات المرتبطة لحذفها"""
+    """عرض القنوات للحذف"""
     keyboard = []
     if entities:
         for entity in entities:
@@ -59,81 +58,53 @@ def get_entities_keyboard(entities):
     return InlineKeyboardMarkup(keyboard)
 
 def get_request_channel_keyboard():
-    """زر طلب القناة (Native Telegram UI)"""
     keyboard = [
-        [
-            KeyboardButton(
-                "📢 اضغط هنا لاختيار القناة",
-                request_chat=KeyboardButtonRequestChat(
-                    request_id=1,
-                    chat_is_channel=True,
-                    user_administrator_rights={"can_post_messages": True}
-                )
-            )
-        ],
+        [KeyboardButton("📢 اضغط هنا لاختيار القناة", request_chat=KeyboardButtonRequestChat(
+            request_id=1, chat_is_channel=True, user_administrator_rights={"can_post_messages": True}))],
         [KeyboardButton("🔙 إلغاء")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
 
-# --- 3. لوحة تحكم الأدمن (توليد الأكواد بالمدد الزمنية) ---
+# --- 3. لوحة تحكم الأدمن (المطابقة لـ main.py) ---
 
 def get_admin_keyboard():
-    """لوحة تحكم الأدمن"""
     kb = [
-        [
-            InlineKeyboardButton("📊 الإحصائيات", callback_data='adm_s'),
-            InlineKeyboardButton("👥 إدارة المستخدمين", callback_data='adm_u')
-        ],
+        [InlineKeyboardButton("👥 إدارة المستخدمين", callback_data='adm_u')],
         [InlineKeyboardButton("🔑 توليد أكواد تفعيل", callback_data='adm_gen_menu')],
         [InlineKeyboardButton("🏠 العودة للرئيسية", callback_data='home')]
     ]
     return InlineKeyboardMarkup(kb)
 
-def get_generation_menu():
-    """قائمة اختيار مدة الكود المطلوب توليده"""
-    kb = [
-        [
-            InlineKeyboardButton("🗓️ 30 يوم", callback_data='gen_30'),
-            InlineKeyboardButton("🗓️ 60 يوم", callback_data='gen_60')
-        ],
-        [
-            InlineKeyboardButton("🗓️ 90 يوم", callback_data='gen_90'),
-            InlineKeyboardButton("🗓️ سنة كاملة", callback_data='gen_365')
-        ],
-        [InlineKeyboardButton("🔙 عودة للوحة الأدمن", callback_data='adm')]
-    ]
-    return InlineKeyboardMarkup(kb)
-def get_back_to_admin():
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للوحة المالك", callback_data='adm')]])
-
-def get_all_users():
-    try:
-        with get_db() as conn:
-            with conn.cursor() as cur:
-                # نختار الأعمدة الموجودة فعلياً في جدولك (Neon)
-                cur.execute("SELECT user_id, is_activated, expiry_date FROM users ORDER BY created_at DESC LIMIT 50")
-                rows = cur.fetchall()
-                return rows # سيعود ببياناتك الحالية بدون أخطاء
-    except Exception as e:
-        print(f"❌ خطأ: {e}")
-        return []
-
-
+def get_users_management_keyboard(users):
+    """عرض المستخدمين في لوحة الأدمن"""
+    keyboard = []
+    for user in users:
+        # ملاحظة: في Neon/Postgres نستخدم user_id
+        status_icon = "✅" if user.get('is_activated') else "❌"
+        uid = user.get('user_id')
+        keyboard.append([InlineKeyboardButton(f"{status_icon} ID: {uid}", callback_data=f"view_u_{uid}")])
+    
+    keyboard.append([InlineKeyboardButton("🔙 عودة للوحة الأدمن", callback_data="adm")])
+    return InlineKeyboardMarkup(keyboard)
 
 def get_user_control_keyboard(target_id, is_active):
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    
-    # اختيار النص المناسب للزر بناءً على حالة المستخدم
+    """التحكم بمستخدم معين (تم إصلاح callback_data)"""
     toggle_text = "🚫 تعطيل الحساب" if is_active else "✅ تفعيل الحساب"
     action = "deactivate" if is_active else "activate"
     
     keyboard = [
-        [InlineKeyboardButton(toggle_text, callback_query_data=f"toggle_u_{action}_{target_id}")],
-        [InlineKeyboardButton("🔙 عودة للقائمة", callback_query_data="adm_u")]
+        [InlineKeyboardButton(toggle_text, callback_data=f"toggle_u_{action}_{target_id}")],
+        [InlineKeyboardButton("🔙 عودة للقائمة", callback_data="adm_u")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def get_generation_menu():
+    kb = [
+        [InlineKeyboardButton("🗓️ 30 يوم", callback_data='gen_30'), InlineKeyboardButton("🗓️ 60 يوم", callback_data='gen_60')],
+        [InlineKeyboardButton("🗓️ 90 يوم", callback_data='gen_90'), InlineKeyboardButton("🗓️ سنة كاملة", callback_data='gen_365')],
+        [InlineKeyboardButton("🔙 عودة للوحة الأدمن", callback_data='adm')]
+    ]
+    return InlineKeyboardMarkup(kb)
 
-
-
+def get_back_to_admin():
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🔙 العودة للوحة المالك", callback_data='adm')]])
