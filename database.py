@@ -166,32 +166,45 @@ def add_subscription_code(code, days=30):
         return False
 
 def activate_user_with_code(user_id, code):
+def activate_user_with_code(user_id, code):
     """تفعيل اشتراك المستخدم بعد التحقق من الكود"""
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT * FROM activation_codes WHERE code = %s AND is_used = FALSE", (code,))
+                # التعديل هنا: استخدام UPPER و strip لضمان مطابقة الكود بدقة
+                cur.execute(
+                    "SELECT * FROM activation_codes WHERE UPPER(code) = UPPER(%s) AND is_used = FALSE", 
+                    (code.strip(),)
+                )
                 code_data = cur.fetchone()
                 
                 if not code_data:
                     return False, "⚠️ الكود غير صالح أو مستخدم مسبقاً."
                 
                 days = code_data['days']
+                # حساب تاريخ الانتهاء بناءً على وقت التفعيل الحالي
                 expiry_date = datetime.now() + timedelta(days=days)
                 
+                # 1. تحديث بيانات المستخدم
                 cur.execute("""
                     UPDATE users 
                     SET is_activated = TRUE, expiry_date = %s 
                     WHERE user_id = %s
                 """, (expiry_date, str(user_id)))
                 
-                cur.execute("UPDATE activation_codes SET is_used = TRUE, used_by = %s WHERE code = %s", (str(user_id), code))
+                # 2. تحديث حالة الكود في جدول الأكواد (استخدام اسم الكود الأصلي من القاعدة)
+                cur.execute("""
+                    UPDATE activation_codes 
+                    SET is_used = TRUE, used_by = %s 
+                    WHERE code = %s
+                """, (str(user_id), code_data['code']))
                 
                 conn.commit()
                 return True, f"✅ تم التفعيل بنجاح لمدة {days} يوم."
     except Exception as e:
         logging.error(f"Error in activation: {e}")
         return False, "❌ حدث خطأ فني أثناء التفعيل."
+
 def get_user_details(user_id):
     try:
         with get_db() as conn:
