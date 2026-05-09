@@ -159,7 +159,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await clean_and_show_menu(update, context, uid)
 return
         
-    if text.upper().startswith("SMO-"):
+if text.upper().startswith("SMO-"):
         status_msg = await update.message.reply_text("⏳ جاري التحقق من الكود...")
         success, response_text = activation_handler.process_activation(uid, text)
         if success:
