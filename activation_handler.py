@@ -3,29 +3,33 @@ from datetime import datetime, timedelta
 import database 
 
 def process_activation(user_id, code_text):
-    """المعالج المنفصل لتفعيل الأكواد"""
-    # تنظيف النص من المسافات
-    code_text = code_text.strip()
+    """
+    المعالج المنفصل لتفعيل الأكواد.
+    يستقبل المعرف والنص، ثم يطلب من قاعدة البيانات التحقق والتفعيل.
+    """
+    # 1. تنظيف النص من أي مسافات زائدة
+    code_text = str(code_text).strip()
     
     try:
-        # الربط مع قاعدة البيانات
+        # 2. استدعاء الدالة من ملف database.py
         success, message = database.activate_user_with_code(user_id, code_text)
         
         if success:
-            logging.info(f"✅ تم التفعيل بنجاح للمستخدم {user_id}")
+            logging.info(f"✅ تم التفعيل بنجاح للمستخدم {user_id} باستخدام الكود {code_text}")
             return True, message
         else:
+            logging.warning(f"⚠️ محاولة تفعيل فاشلة: المستخدم {user_id} - الكود {code_text}")
             return False, message
             
     except Exception as e:
-        logging.error(f"Error in activation_handler: {e}")
-        return False, "❌ حدث خطأ فني، حاول مرة أخرى."
+        logging.error(f"❌ Error in activation_handler: {e}")
+        return False, "❌ حدث خطأ فني داخلي، يرجى التواصل مع الدعم."
 
 def get_activation_instruction_text():
-    """نص التعليمات المحدث"""
+    """نص التعليمات الموحد الذي يظهر للمستخدم عند طلب الكود"""
     return (
         "🔄 <b>قسم تفعيل الاشتراك</b>\n\n"
-        "من فضلك أرسل كود التفعيل الخاص بك الآن.\n"
-        "مثال: <code>SMO-XXXXXX</code>\n\n"
-        "<i>سيتم قبول الكود سواء كانت الأحرف كبيرة أو صغيرة.</i>"
+        "من فضلك قم بإرسال كود التفعيل الخاص بك الآن.\n"
+        "مثال: <code>SMO-456FC4</code>\n\n"
+        "<i>💡 ملاحظة: لا يهم إذا كانت الحروف كبيرة أو صغيرة.</i>"
     )
