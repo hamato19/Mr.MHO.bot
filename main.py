@@ -151,6 +151,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    if not update.message: return
     text = update.message.text.strip() if update.message.text else ""
 
     if update.message.chat_shared:
@@ -159,9 +160,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await clean_and_show_menu(update, context, uid)
         return
 
+    # تحويل النص للأحرف الكبيرة للتحقق من الكود
     if text.upper().startswith("SMO-"):
         status_msg = await update.message.reply_text("⏳ جاري التحقق من الكود...")
-        success, response_text = activation_handler.process_activation(uid, text)
+        # نرسل النص الأصلي (أو المحول) لدالة المعالجة
+        success, response_text = activation_handler.process_activation(uid, text.upper())
         if success:
             await status_msg.edit_text(f"🎊 {response_text}", parse_mode='HTML')
             await clean_and_show_menu(update, context, uid)
@@ -179,6 +182,7 @@ async def main():
     app = Application.builder().token(config.BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
+    # تعديل الفلتر لضمان التقاط الرسائل النصية والـ chat_shared بشكل صحيح
     app.add_handler(MessageHandler(filters.TEXT | filters.StatusUpdate.CHAT_SHARED, handle_message))
     logger.info("🚀 سمو الأرقام تعمل الآن...")
     await app.initialize(); await app.start()
