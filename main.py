@@ -104,16 +104,38 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- القسم المحمي (للمشتركين والأدمن فقط) ---
     if is_owner or (user and user.get('is_activated')):
-        if data == 'acc': # حسابي
-            # جلب تاريخ الانتهاء من قاعدة البيانات وتنسيقه
-            expiry_date = user.get('expiry_date')
-            time_left = services.get_time_remaining(expiry_date) if not is_owner else "وصول كامل (أدمن)"
+        if data == 'acc': # زر حسابي
+            # 1. جلب بيانات المستخدم كاملة من قاعدة البيانات
+            user = database.get_user_profile(uid)
+            
+            # 2. جلب عدد القنوات المرتبطة
+            user_entities = database.get_user_entities(uid)
+            channels_count = len(user_entities) if user_entities else 0
+            
+            # 3. معالجة التاريخ وحالة NULL الظاهرة في قاعدة بياناتك
+            raw_date = user.get('expiry_date')
+            
+            if is_owner:
+                time_left = "وصول كامل (المطور)"
+            elif raw_date:
+                # إذا كان التاريخ 2099 كما في الصورة فهو اشتراك دائم
+                if "2099" in str(raw_date):
+                    time_left = "إشتراك دائم ♾️"
+                else:
+                    time_left = services.get_time_remaining(raw_date)
+            else:
+                # هذا الحل إذا كانت القيمة NULL كما في الصورة
+                time_left = "غير محدد (يرجى التواصل مع الدعم)"
+
+            # 4. الرسالة النهائية
             await query.edit_message_text(
                 f"👤 <b>بيانات حسابك:</b>\n\n"
                 f"🆔 معرفك: <code>{uid}</code>\n"
-                f"⏳ حالة الاشتراك: {'نشط ✅' if is_owner or user.get('is_activated') else 'غير مفعل'}\n"
-                f"📅 ينتهي في: <code>{time_left}</code>", 
-                parse_mode='HTML', reply_markup=keyboards.get_back_home()
+                f"⏳ حالة الاشتراك: {'نشط ✅' if is_owner or user.get('is_activated') else 'غير مفعل ❌'}\n"
+                f"📅 ينتهي في: <code>{time_left}</code>\n"
+                f"📢 القنوات المضافة: <b>{channels_count}</b>", 
+                parse_mode='HTML', 
+                reply_markup=keyboards.get_back_home()
             )
         
         elif data == 'wh': # الويب هوك
