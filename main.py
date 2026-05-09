@@ -158,10 +158,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ تم ربط القناة بنجاح!", reply_markup=ReplyKeyboardRemove())
         await clean_and_show_menu(update, context, uid)
         return
-
-    # معالجة التفعيل (للأدمن وللمستخدم)
-        # --- بداية التعديل ---
-    
     # 1. تفعيل الأدمن لمستخدم آخر
     if context.user_data.get('awaiting_admin_code'):
         target_uid = context.user_data.get('target_user_to_activate')
