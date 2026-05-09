@@ -101,7 +101,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == 'ren':
         await query.edit_message_text("🔄 <b>تفعيل الاشتراك:</b>\nأرسل الكود في الشات مباشرة (مثال: SMO-XXXX)", parse_mode='HTML', reply_markup=keyboards.get_subscription_options())
         return
-
+    if data == 'how_to_act':
+        await query.message.reply_text(
+            "🎫 <b>طريقة تفعيل الاشتراك:</b>\n\n"
+            "من فضلك قم بكتابة كود التفعيل الخاص بك هنا في الشات مباشرة.\n"
+            "مثال: <code>SMO-XXXX-XXXX</code>\n\n"
+            "⏳ سيقوم النظام بالتحقق من الكود تلقائياً.", 
+            parse_mode='HTML'
+        )
+        return
     # --- القسم المحمي (للمشتركين والأدمن فقط) ---
     if is_owner or (user and user.get('is_activated')):
         if data == 'acc': # زر حسابي
