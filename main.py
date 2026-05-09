@@ -9,7 +9,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 async def clean_and_show_menu(update_or_query, context, uid):
-    """تحديث القائمة الرئيسية بشكل سلس"""
+    """تحديث القائمة الرئيسية بشكل سلس وبدون أخطاء"""
     user = database.get_user_profile(uid)
     bot_info = await context.bot.get_me()
     is_owner = (str(uid) == str(config.ADMIN_ID))
@@ -44,10 +44,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_owner = (str(uid) == str(config.ADMIN_ID))
     user = database.get_user_profile(uid)
     
+    # استجابة فورية للمسة الزر
     try: await query.answer()
     except: pass
 
-    # --- إدارة التنقل ---
+    # --- إدارة التنقل العام ---
     if data == 'home':
         context.user_data.clear()
         await clean_and_show_menu(query, context, uid)
@@ -62,7 +63,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("✅ تم قبول الشروط.\nيرجى اختيار وسيلة التفعيل:", reply_markup=keyboards.get_subscription_options())
         return
 
-    # زر التجديد/التفعيل (كان يحتاج تفعيل الحالة)
     if data == 'ren':
         await query.edit_message_text("🔄 <b>تجديد أو تفعيل الاشتراك:</b>\n\nمن فضلك أرسل كود التفعيل المكون من 12 خانة:", 
                                       parse_mode='HTML', reply_markup=keyboards.get_back_home())
@@ -74,7 +74,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['awaiting_id_check'] = True
         return
 
-    # --- لوحة الأدمن ---
+    # --- لوحة التحكم للأدمن ---
     if is_owner:
         if data == 'adm':
             t, a, c = database.get_admin_dashboard_stats()
@@ -119,7 +119,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if data in ['adm', 'adm_u', 'adm_gen_menu'] or data.startswith(('gen_', 'view_u_', 'toggle_', 'del_')): return
 
-    # --- وظائف المشتركين ---
+    # --- وظائف المشتركين (سمو الأرقام) ---
     if is_owner or (user and user.get('is_activated')):
         if data == 'chs':
             ents = database.get_user_entities(uid)
@@ -132,38 +132,25 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("📢 اضغط الزر أدناه لاختيار القناة المراد ربطها:", 
                                           reply_markup=keyboards.get_request_channel_keyboard())
             return
-    # --- زر توليد رمز الأمان (Webhook Token) ---
-    if data == 'tok':
-        # 1. توليد رمز سداسي عشري فريد وجديد
-        new_token = secrets.token_hex(8).upper()
-        
-        # 2. تحديث الرمز في قاعدة البيانات للمستخدم الحالي
-        # تأكد من وجود هذه الدالة في database.py
-        database.update_user_token(uid, new_token)
-        
-        # 3. تنبيه سريع للمستخدم
-        await query.answer("✅ تم تحديث رمز الأمان بنجاح", show_alert=True)
-        
-        # 4. جلب روابط الويب هوك المحدثة لعرضها
-        webhook_text = services.format_webhook_links(uid)
-        
-        await query.edit_message_text(
-            f"🔐 <b>تم توليد رمز أمان جديد!</b>\n\n"
-            f"🌐 <b>روابط الويب هوك الخاصة بك:</b>\n"
-            f"<code>{webhook_text}</code>\n\n"
-            f"⚠️ <b>تنبيه:</b> يجب عليك تحديث الرابط في TradingView لضمان استمرار وصول الإشارات، حيث أن الرمز القديم لم يعد يعمل.",
-            parse_mode='HTML',
-            reply_markup=keyboards.get_back_home()
-        )
-        return
-        
+
+        elif data == 'tok': # زر توليد رمز الأمان (Webhook Token)
+            new_token = secrets.token_hex(8).upper()
+            database.update_user_token(uid, new_token)
+            await query.answer("✅ تم تحديث رمز الأمان بنجاح", show_alert=True)
+            webhook_text = services.format_webhook_links(uid)
+            await query.edit_message_text(
+                f"🔐 <b>تم توليد رمز أمان جديد!</b>\n\n🌐 <b>روابط الويب هوك:</b>\n<code>{webhook_text}</code>\n\n⚠️ قم بتحديث الرابط في TradingView.",
+                parse_mode='HTML', reply_markup=keyboards.get_back_home()
+            )
+            return
+            
         elif data == 'wh':
             webhook_text = services.format_webhook_links(uid)
             await query.edit_message_text(f"🌐 <b>روابط الويب هوك الخاصة بك:</b>\n\n<code>{webhook_text}</code>", parse_mode='HTML', reply_markup=keyboards.get_back_home())
         
         elif data == 'acc':
             expiry = services.get_time_remaining(user.get('expiry_date')) if user else "دائم"
-            await query.edit_message_text(f"👤 <b>بيانات حسابك:</b>\n🆔 المعرف: <code>{uid}</code>\n⏳ الصلاحية: {expiry}", parse_mode='HTML', reply_markup=keyboards.get_back_home())
+            await query.edit_message_text(f"👤 <b>بيانات حسابك:</b>\n🆔 ID: <code>{uid}</code>\n⏳ الصلاحية: {expiry}", parse_mode='HTML', reply_markup=keyboards.get_back_home())
         
         elif data.startswith('d_'):
             ch_id = data.replace('d_', '')
@@ -175,10 +162,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    if not update.message or (not update.message.text and not update.message.chat_shared): return
+    if not update.message: return
     text = update.message.text.strip() if update.message.text else ""
 
-    # 1. ربط القنوات
+    # 1. ربط القنوات عبر Shared Chat
     if update.message.chat_shared:
         database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
         await update.message.reply_text("✅ تم ربط القناة بنجاح!")
@@ -194,13 +181,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             u_prof = database.get_user_profile(clean_id)
             if u_prof and u_prof.get('is_activated'):
-                await update.message.reply_text(f"✅ المعرف <code>{clean_id}</code> <b>نشط ومفعل</b>.", parse_mode='HTML')
+                await update.message.reply_text(f"✅ المعرف <code>{clean_id}</code> نشط ومفعل.", parse_mode='HTML')
             else:
-                await update.message.reply_text(f"❌ المعرف <code>{clean_id}</code> غير موجود أو غير مفعل حالياً.", parse_mode='HTML')
+                await update.message.reply_text(f"❌ المعرف <code>{clean_id}</code> غير موجود أو غير مفعل.", parse_mode='HTML')
         await clean_and_show_menu(update, context, uid)
         return
 
-    # 3. معالجة أكواد التفعيل (سواء بدأت بـ SMO- أو كانت حالة انتظار)
+    # 3. معالجة الأكواد
     if text.upper().startswith("SMO-") or context.user_data.get('awaiting_code'):
         context.user_data['awaiting_code'] = False
         msg = await update.message.reply_text("⏳ جاري التحقق من الرمز...")
