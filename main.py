@@ -117,10 +117,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- العمليات الأساسية (للمشتركين والأدمن) ---
     if is_owner or (user and user.get('is_activated')):
-        if data == 'add_channel':
-            await query.message.reply_text("📢 اضغط الزر أدناه لاختيار القناة لربطها:", reply_markup=keyboards.get_request_channel_keyboard())
-            try: await query.delete_message()
-            except: pass
+            if data == 'add_channel':
+            # 1. لا نحذف الرسالة القديمة هنا (حذفنا query.delete_message)
+            
+            # 2. نرسل زر المشاركة ككيبورد سفلي فقط
+            await query.message.reply_text(
+                "📢 تم فتح خيار اختيار القناة في الأسفل 👇\nيمكنك اختيار القناة الآن، أو الاستمرار في استخدام القائمة أعلاه.", 
+                reply_markup=keyboards.get_request_channel_keyboard()
+            )
+            
+            # 3. ننهي التنفيذ لتبقى القائمة الرئيسية (Inline) والزر الجديد (Reply) يعملان معاً
+            return 
+
 
         elif data == 'chs':
             ents = database.get_user_entities(uid)
