@@ -160,27 +160,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # معالجة التفعيل (للأدمن وللمستخدم)
+        # --- بداية التعديل ---
+    
+    # 1. تفعيل الأدمن لمستخدم آخر
     if context.user_data.get('awaiting_admin_code'):
         target_uid = context.user_data.get('target_user_to_activate')
-        days = database.check_and_use_code(text)
-        if days:
-            database.activate_user_subscription(target_uid, days)
+        
+        # استدعاء الدالة المدمجة الجديدة
+        success, message = database.activate_user_with_code(target_uid, text)
+        
+        if success:
             context.user_data.clear()
-            await update.message.reply_text(f"✅ تم تفعيل حساب <code>{target_uid}</code> بنجاح.")
+            await update.message.reply_text(f"👤 للمستخدم <code>{target_uid}</code>:\n{message}")
             await clean_and_show_menu(update, context, uid)
         else:
-            await update.message.reply_text("❌ الكود غير صحيح.")
+            await update.message.reply_text(message)
         return
 
+    # 2. تفعيل المستخدم لنفسه
     if context.user_data.get('awaiting_code'):
-        days = database.check_and_use_code(text)
-        if days:
-            database.activate_user_subscription(uid, days)
+        
+        # استدعاء الدالة المدمجة الجديدة
+        success, message = database.activate_user_with_code(uid, text)
+        
+        if success:
             context.user_data.clear()
-            await update.message.reply_text(f"🎉 تم التفعيل بنجاح لـ {days} يوم!")
+            await update.message.reply_text(message)
             await clean_and_show_menu(update, context, uid)
         else:
-            await update.message.reply_text("❌ الكود خاطئ.")
+            await update.message.reply_text(message)
+        return
+
+    # --- نهاية التعديل ---
 
 async def main():
     database.init_db()
