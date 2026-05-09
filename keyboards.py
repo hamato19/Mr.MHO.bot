@@ -158,10 +158,9 @@ def get_entities_keyboard(entities):
 # 9. زر اختيار القناة
 def get_request_channel_keyboard():
     return ReplyKeyboardMarkup([
-        [KeyboardButton("📢 اختر القناة  ", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))],
+        [KeyboardButton("📢 اختر القناة", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))],
         [KeyboardButton("🔙 إلغاء والعودة للقائمة")]
     ], resize_keyboard=True, one_time_keyboard=True)
 
-# 10. العودة السريعة
 def get_back_home():
-    return InlineKeyboardMarkup([back_home_button()])
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 العودة للقائمة", callback_data='home')]])
