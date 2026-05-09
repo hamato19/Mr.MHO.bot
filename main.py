@@ -158,36 +158,66 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ تم ربط القناة بنجاح!", reply_markup=ReplyKeyboardRemove())
         await clean_and_show_menu(update, context, uid)
         return
-    # 1. تفعيل الأدمن لمستخدم آخر
-    if context.user_data.get('awaiting_admin_code'):
-        target_uid = context.user_data.get('target_user_to_activate')
-        
-        # استدعاء الدالة المدمجة الجديدة
-        success, message = database.activate_user_with_code(target_uid, text)
-        
-        if success:
-            context.user_data.clear()
-            await update.message.reply_text(f"👤 للمستخدم <code>{target_uid}</code>:\n{message}")
-            await clean_and_show_menu(update, context, uid)
-        else:
-            await update.message.reply_text(message)
-        return
 
-    # 2. تفعيل المستخدم لنفسه
-    if context.user_data.get('awaiting_code'):
-        
-        # استدعاء الدالة المدمجة الجديدة
-        success, message = database.activate_user_with_code(uid, text)
-        
-        if success:
-            context.user_data.clear()
-            await update.message.reply_text(message)
-            await clean_and_show_menu(update, context, uid)
-        else:
-            await update.message.reply_text(message)
-        return
+def activate_user_with_code(user_id, code):
+    """
+    تفعيل اشتراك المستخدم باستخدام كود من جدول activation_codes.
+    تقوم الدالة بالتحقق من الكود، حساب المدة، وتحديث حالة المستخدم والكود في خطوة واحدة.
+    """
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                # 1. التحقق من وجود الكود وأنه غير مستخدم (مع تجاهل حالة الأحرف)
+                cur.execute(
+                    "SELECT * FROM activation_codes WHERE UPPER(code) = UPPER(%s) AND is_used = FALSE", 
+                    (code.strip(),)
+                )
+                code_data = cur.fetchone()
+                
+                if not code_data:
+                    return False, "⚠️ الكود غير صالح أو مستخدم مسبقاً."
+                
+                # 2. استخراج عدد الأيام وحساب تاريخ انتهاء الاشتراك الجديد
+                days = code_data['days']
+                from datetime import datetime, timedelta
+                expiry_date = datetime.now() + timedelta(days=days)
+                
+                # 3. تحديث بيانات المستخدم في جدول users
+                cur.execute("""
+                    UPDATE users 
+                    SET is_activated = TRUE, expiry_date = %s 
+                    WHERE user_id = %s
+                """, (expiry_date, str(user_id)))
+                
+                # 4. تحديث حالة الكود ليصبح (مستخدماً) وتسجيل من استخدمه
+                cur.execute("""
+                    UPDATE activation_codes 
+                    SET is_used = TRUE, used_by = %s 
+                    WHERE code = %s
+                """, (str(user_id), code_data['code']))
+                
+                # حفظ التغييرات نهائياً في قاعدة البيانات
+                conn.commit()
+                return True, f"✅ تم التفعيل بنجاح لمدة {days} يوم."
 
-    # --- نهاية التعديل ---
+    except Exception as e:
+        import logging
+        logging.error(f"Error in activation logic: {e}")
+        return False, "❌ حدث خطأ فني أثناء التفعيل."
+
+def get_user_details(user_id):
+    """جلب تفاصيل المستخدم للتأكد من حالة التفعيل"""
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute("SELECT user_id, is_activated, expiry_date FROM users WHERE user_id = %s", (str(user_id),))
+                return cur.fetchone()
+    except Exception as e:
+        import logging
+        logging.error(f"Error fetching user details: {e}")
+        return None
+
+
 
 async def main():
     database.init_db()
