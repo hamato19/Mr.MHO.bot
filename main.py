@@ -159,6 +159,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await clean_and_show_menu(update, context, uid)
         return
 
+   if text.upper().startswith("SMO-"):
+        # إرسال رسالة انتظار
+        status_msg = await update.message.reply_text("⏳ جاري التحقق من الكود...")
+        
+        # استدعاء المعالج من ملف activation_handler
+        success, response_text = activation_handler.process_activation(uid, text)
+        
+        if success:
+            await status_msg.edit_text(f"🎊 {response_text}", parse_mode='HTML')
+            # تحديث القائمة لإظهار الخيارات الجديدة للمشترك
+            await clean_and_show_menu(update, context, uid)
+        else:
+            await status_msg.edit_text(response_text, parse_mode='HTML')
+        return
+
+    # 3. رد افتراضي إذا أرسل المستخدم نصاً عشوائياً
+    if not text.startswith("/"):
+        await update.message.reply_text("💡 لتفعيل اشتراكك، أرسل الكود مباشرة (مثال: <code>SMO-XXXXXX</code>)", parse_mode='HTML')
 
 def activate_user_with_code(user_id, code):
     """
