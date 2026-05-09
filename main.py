@@ -67,11 +67,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                       parse_mode='HTML', reply_markup=keyboards.get_back_home())
         context.user_data['awaiting_code'] = True 
         return
-    if query.data == 'check_by_id':
+
+    if data == 'check_by_id':
         await query.message.reply_text("من فضلك، أرسل الآن رقم الـ ID الخاص بك للتحقق:")
-        # تفعيل "حالة الانتظار" لكي يعرف البوت أن الرسالة القادمة هي ID
         context.user_data['awaiting_id_check'] = True
         return
+
     # --- لوحة التحكم للأدمن ---
     if is_owner:
         if data == 'adm':
@@ -94,16 +95,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             u_details = database.get_user_profile(target_id)
             await query.edit_message_text(f"👤 <b>إدارة المستخدم:</b> <code>{target_id}</code>", parse_mode='HTML', 
                                           reply_markup=keyboards.get_user_control_keyboard(target_id, u_details['is_activated']))
+        
         if data in ['adm', 'adm_u', 'adm_gen_menu'] or data.startswith(('gen_', 'view_u_')): return
 
     # --- العمليات الأساسية للمشتركين ---
     if is_owner or (user and user.get('is_activated')):
         if data == 'add_channel':
             context.user_data['awaiting_code'] = False 
-            # نرسل طلب القناة كرسالة منفصلة لتبقى القائمة الرئيسية متاحة في الأعلى
             await query.message.reply_text("📢 اضغط الزر أدناه لاختيار القناة لربطها:", 
                                           reply_markup=keyboards.get_request_channel_keyboard())
-            return # إنهاء لضمان بقاء المنيو القديم شغال
+            return
 
         elif data == 'chs':
             ents = database.get_user_entities(uid)
@@ -133,11 +134,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ تم ربط القناة بنجاح!", reply_markup=ReplyKeyboardRemove())
         await clean_and_show_menu(update, context, uid)
         return
-         التحقق من حالة "انتظار إدخال ID" (Awaiting ID Check)
+
+    # 2. التحقق من حالة "انتظار إدخال ID"
     if context.user_data.get('awaiting_id_check'):
-        await process_id_verification(update, context, uid, text)
+        context.user_data['awaiting_id_check'] = False # إيقاف الحالة فور الاستلام
+        user_profile = database.get_user_profile(text) # نفترض أن text هو الـ ID
+        if user_profile and user_profile.get('is_activated'):
+            await update.message.reply_text(f"✅ المستخدم ذو المعرف {text} مفعل بنجاح.")
+        else:
+            await update.message.reply_text(f"❌ المعرف {text} غير موجود أو غير مفعل.")
+        await clean_and_show_menu(update, context, uid)
         return
-    # 2. معالجة كود التفعيل
+
+    # 3. معالجة كود التفعيل
     if text.upper().startswith("SMO-"):
         status_msg = await update.message.reply_text("⏳ جاري التحقق من الكود...")
         success, response_text = activation_handler.process_activation(uid, text.upper())
