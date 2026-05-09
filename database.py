@@ -97,19 +97,20 @@ def get_user_profile(user_id):
         return None
 
 # --- 3. إدارة التوكن والقنوات ---
-
-def update_user_secret_token(user_id):
+def update_user_secret_token(user_id, new_token):
     """تحديث التوكن السري للمستخدم"""
-    new_token = secrets.token_urlsafe(24)
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
+                # تأكد من اسم الجدول؛ في الصورة السابقة كان اسمه activation_codes
+                # إذا كان اسم الجدول users كما في الكود الحالي فاستخدمه
                 cur.execute("UPDATE users SET secret_token = %s WHERE user_id = %s", (new_token, str(user_id)))
                 conn.commit()
-                return new_token
+                return True # نكتفي بإرجاع True للتأكيد
     except Exception as e:
         logging.error(f"Error updating token: {e}")
-        return None
+        return False
+
 
 def add_user_entity(user_id, entity_id, entity_name):
     """ربط قناة أو مجموعة جديدة"""
