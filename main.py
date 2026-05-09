@@ -132,6 +132,30 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("📢 اضغط الزر أدناه لاختيار القناة المراد ربطها:", 
                                           reply_markup=keyboards.get_request_channel_keyboard())
             return
+    # --- زر توليد رمز الأمان (Webhook Token) ---
+    if data == 'tok':
+        # 1. توليد رمز سداسي عشري فريد وجديد
+        new_token = secrets.token_hex(8).upper()
+        
+        # 2. تحديث الرمز في قاعدة البيانات للمستخدم الحالي
+        # تأكد من وجود هذه الدالة في database.py
+        database.update_user_token(uid, new_token)
+        
+        # 3. تنبيه سريع للمستخدم
+        await query.answer("✅ تم تحديث رمز الأمان بنجاح", show_alert=True)
+        
+        # 4. جلب روابط الويب هوك المحدثة لعرضها
+        webhook_text = services.format_webhook_links(uid)
+        
+        await query.edit_message_text(
+            f"🔐 <b>تم توليد رمز أمان جديد!</b>\n\n"
+            f"🌐 <b>روابط الويب هوك الخاصة بك:</b>\n"
+            f"<code>{webhook_text}</code>\n\n"
+            f"⚠️ <b>تنبيه:</b> يجب عليك تحديث الرابط في TradingView لضمان استمرار وصول الإشارات، حيث أن الرمز القديم لم يعد يعمل.",
+            parse_mode='HTML',
+            reply_markup=keyboards.get_back_home()
+        )
+        return
         
         elif data == 'wh':
             webhook_text = services.format_webhook_links(uid)
