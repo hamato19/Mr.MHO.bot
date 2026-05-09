@@ -3,6 +3,7 @@ from telegram import Update, ReplyKeyboardRemove, InlineKeyboardButton, InlineKe
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import config, database, services, keyboards, web_server, privacy_policy
 import activation_handler
+
 # إعدادات المراقبة
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,16 +34,23 @@ async def clean_and_show_menu(update_or_query, context, uid):
         markup = keyboards.get_subscription_options()
 
     if isinstance(update_or_query, Update):
-        await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+        sent_msg = await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+        if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
+        context.user_data['temp_msg_ids'].append(sent_msg.message_id)
     else:
         try:
             await update_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
         except:
-            await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+            sent_msg = await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+            if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
+            context.user_data['temp_msg_ids'].append(sent_msg.message_id)
 
 # --- 2. المعالجات (Handlers) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+    if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
+    # تنظيف الشاشة فور الدخول
+    await clear_temp_messages(context, uid)
     user = database.get_user_profile(uid)
     if not user:
         await update.message.reply_text(privacy_policy.DISCLAIMER_TEXT, parse_mode='HTML', reply_markup=keyboards.get_disclaimer_keyboard())
@@ -56,8 +64,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_owner = (str(uid) == str(config.ADMIN_ID))
     user = database.get_user_profile(uid)
     
-    # 🛑 التنظيف الذكي لكل الأزرار
-    await clear_temp_messages(context, uid)
     if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
 
     try: await query.answer()
@@ -65,12 +71,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 1. التنقل الأساسي
     if data == 'home':
-        context.user_data.clear()
         await clean_and_show_menu(query, context, uid)
         return
 
     # 2. إدارة الاشتراك
     if data == 'ren':
+        await clear_temp_messages(context, uid)
         context.user_data['awaiting_code'] = True 
         sub_markup = InlineKeyboardMarkup([
             [InlineKeyboardButton("💳 اشتراك الآن", url="https://sumoualarqam.com/")],
@@ -80,52 +86,38 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("🔄 <b>تفعيل الاشتراك:</b>\nأرسل كود التفعيل هنا مباشرة.", parse_mode='HTML', reply_markup=sub_markup)
         return
 
-    # 3. وظائف المشتركين (كاملة الأزرار)
+    # 3. وظائف المشتركين (تم إضافة الحذف الذكي هنا)
     if is_owner or (user and user.get('is_activated')):
         if data == 'acc': # حسابي
-            expiry = services.get_time_remaining(user.get('expiry_date')) if user else "دائم"
+            await clear_temp_messages(context, uid) # تنظيف قبل العرض
+            expiry = services.get_time_remaining(user.get('expiry_date')) if user and not is_owner else "دائم"
             await query.edit_message_text(f"👤 <b>بيانات حسابك:</b>\n🆔 ID: <code>{uid}</code>\n⏳ الانتهاء: {expiry}", parse_mode='HTML', reply_markup=keyboards.get_back_home())
             return
 
-        elif data == 'wh': # الويب هوك (عرض الروابط)
+        elif data == 'wh': # الويب هوك
             webhook_text = services.format_webhook_links(uid)
             msg = await context.bot.send_message(chat_id=uid, text=f"🌐 <b>روابط الويب هوك:</b>\n\n<code>{webhook_text}</code>", parse_mode='HTML')
             context.user_data['temp_msg_ids'].append(msg.message_id)
             return
             
-        elif data == 'tok': # توليد رمز جديد
-            # 1. فك تعليق الزر فوراً (ضروري جداً للاستجابة)
-            await query.answer()
-            
-            # 2. العمليات البرمجية
+        elif data == 'tok': # تحديث الرمز
             new_token = secrets.token_hex(8).upper()
-            
-            # ملاحظة: إذا كانت الدالة في database.py معرفة بـ async def أضف await هنا
             database.update_user_secret_token(uid, new_token)
-            
             webhook_text = services.format_webhook_links(uid)
-            
-            # 3. إرسال الرسالة الجديدة
-            msg = await context.bot.send_message(
-                chat_id=uid, 
-                text=f"🔐 <b>تم تحديث رمز الأمان!</b>\n\nالروابط الجديدة:\n<code>{webhook_text}</code>", 
-                parse_mode='HTML'
-            )
-            
-            # 4. إضافة المعرف للمصفوفة (تأكد من تعريفها أولاً)
-            if 'temp_msg_ids' not in context.user_data:
-                context.user_data['temp_msg_ids'] = []
+            msg = await context.bot.send_message(chat_id=uid, text=f"🔐 <b>تم تحديث الرمز بنجاح!</b>\n\nروابطك الجديدة:\n<code>{webhook_text}</code>", parse_mode='HTML')
             context.user_data['temp_msg_ids'].append(msg.message_id)
-            
             return
 
         elif data == 'chs': # قنواتي
+            await clear_temp_messages(context, uid)
             ents = database.get_user_entities(uid)
             await query.edit_message_text("📋 <b>قنواتك المرتبطة:</b>", parse_mode='HTML', reply_markup=keyboards.get_entities_keyboard(ents))
             return
 
         elif data == 'add_channel': # إضافة قناة
-             await query.message.reply_text("📢 اضغط الزر أدناه لاختيار القناة:", reply_markup=keyboards.get_request_channel_keyboard())
+             await clear_temp_messages(context, uid) # تنظيف لضمان ظهور زر الطلب بوضوح
+             msg = await query.message.reply_text("📢 اضغط الزر أدناه لاختيار القناة المراد ربطها:", reply_markup=keyboards.get_request_channel_keyboard())
+             context.user_data['temp_msg_ids'].append(msg.message_id)
              return
 
     # --- 4. لوحة الأدمن ---
@@ -140,29 +132,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("👥 <b>إدارة المستخدمين:</b>", parse_mode='HTML', reply_markup=keyboards.get_users_management_keyboard(users))
             return
 
-        # 👇 تضاف الإضافة المطورة هنا مباشرة 👇
-     elif data.startswith('view_u_'):
+        elif data.startswith('view_u_'):
             target_uid = int(data.split('_')[2]) 
             target_user = database.get_user_profile(target_uid) 
-            
             if target_user:
                 await clear_temp_messages(context, uid)
                 status = "✅ مفعل" if target_user.get('is_activated') else "❌ غير مفعل"
                 exp = services.get_time_remaining(target_user.get('expiry_date'))
-                
                 user_entities = database.get_user_entities(target_uid)
                 channels_text = "\n".join([f"🔹 <code>{e['entity_id']}</code>" for e in user_entities]) if user_entities else "لا توجد قنوات."
                 webhook_links = services.format_webhook_links(target_uid)
-
-                text = (
-                    f"👤 <b>تفاصيل المستخدم:</b>\n"
-                    f"🆔 ID: <code>{target_uid}</code>\n"
-                    f"👤 الاسم: {target_user.get('full_name')}\n"
-                    f"📊 الحالة: {status}\n"
-                    f"⏳ الصلاحية: {exp}\n\n"
-                    f"📢 <b>القنوات:</b>\n{channels_text}\n\n"
-                    f"🌐 <b>الويب هوك:</b>\n<code>{webhook_links}</code>"
-                )
+                text = (f"👤 <b>تفاصيل المستخدم:</b>\n🆔 ID: <code>{target_uid}</code>\n👤 الاسم: {target_user.get('full_name')}\n📊 الحالة: {status}\n⏳ الصلاحية: {exp}\n\n📢 <b>القنوات:</b>\n{channels_text}\n\n🌐 <b>الويب هوك:</b>\n<code>{webhook_links}</code>")
                 await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboards.get_user_control_keyboard(target_uid))
             return
 
@@ -180,38 +160,48 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    if update.message and update.message.chat_shared:
+    if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
+    
+    if update.message:
+        context.user_data['temp_msg_ids'].append(update.message.message_id)
+
+    # استقبال القناة
+    if update.message.chat_shared:
         database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
-        await update.message.reply_text("✅ تم ربط القناة بنجاح!")
+        m = await update.message.reply_text("✅ تم ربط القناة!")
+        context.user_data['temp_msg_ids'].append(m.message_id)
+        await asyncio.sleep(1)
         await clean_and_show_menu(update, context, uid)
-    elif update.message and update.message.text:
+        return
+
+    # استقبال الكود
+    if update.message.text:
         text = update.message.text.strip()
         if text.upper().startswith("SMO-") or context.user_data.get('awaiting_code'):
             context.user_data['awaiting_code'] = False
             msg = await update.message.reply_text("⏳ جاري التفعيل...")
+            context.user_data['temp_msg_ids'].append(msg.message_id)
             success, res = activation_handler.process_activation(uid, text.upper())
             await msg.edit_text(f"{'🎉' if success else '❌'} {res}", parse_mode='HTML')
-            if success: await clean_and_show_menu(update, context, uid)
+            if success: 
+                await asyncio.sleep(2)
+                await clean_and_show_menu(update, context, uid)
 
-# --- 3. تشغيل التطبيق (Render Fix) ---
 async def main():
     database.init_db()
     await web_server.start_server()
     app = Application.builder().token(config.BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
-    app.add_handler(MessageHandler(filters.TEXT | filters.StatusUpdate.CHAT_SHARED, handle_message))
+    app.add_handler(MessageHandler(filters.ALL, handle_message))
     
-    logger.info("🚀 سمو الأرقام بدأ العمل بنجاح...")
+    logger.info("🚀 سمو الأرقام يعمل بنظام التنظيف الشامل...")
     async with app:
         await app.initialize()
         await app.start()
         await app.updater.start_polling(drop_pending_updates=True)
-        while True:
-            await asyncio.sleep(3600)
+        while True: await asyncio.sleep(3600)
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("Bot stopped!")
+    try: asyncio.run(main())
+    except: pass
