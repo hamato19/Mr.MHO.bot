@@ -172,9 +172,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await status_msg.edit_text(response_text, parse_mode='HTML')
         return
 
-    if text and not text.startswith("/"):
-        msg = "💡 لتفعيل اشتراكك، أرسل الكود مباشرة.\nمثال: <code>SMO-XXXXXX</code>"
-        await update.message.reply_text(msg, parse_mode='HTML')
 
 async def main():
     database.init_db()
