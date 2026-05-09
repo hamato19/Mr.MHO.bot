@@ -159,4 +159,8 @@ async def main():
     await app.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
-    main()
+    try:
+        import asyncio
+        asyncio.run(main()) # هذه الطريقة الصحيحة لتشغيل الدالة المزامنة
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot stopped!")
