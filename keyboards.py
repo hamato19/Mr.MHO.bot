@@ -62,18 +62,15 @@ async def get_main_menu(uid, bot_username="bot"):
 
     return InlineKeyboardMarkup(kb)
 
-# --- قائمة خيارات الاشتراك (نظام الـ Web App لمنع النصوص الزائدة) ---
+
 def get_subscription_options():
-    # استبدل الرابط أدناه برابط صفحة التفعيل (iframe) الخاصة بك
-    webapp_url = "https://sumoualarqam.netlify.app/" 
-    
     kb = [
         [InlineKeyboardButton("💳 اشترك الآن", url="https://sumoualarqam.com/")],
-        [InlineKeyboardButton("🎫 ادخل كود التفعيل", web_app=WebAppInfo(url=webapp_url))],
+        # قمنا بإزالة الـ Web App والآن يوجه المستخدم للكتابة فقط
+        [InlineKeyboardButton("🎫 طريقة التفعيل", callback_data='how_to_act')],
         [InlineKeyboardButton("⬅️ رجوع", callback_data='home')]
     ]
     return InlineKeyboardMarkup(kb)
-
 # 4. لوحة الأدمن
 def get_admin_keyboard():
     return InlineKeyboardMarkup([
