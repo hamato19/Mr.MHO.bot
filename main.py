@@ -160,42 +160,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 return
         
     if text.upper().startswith("SMO-"):
-        # إرسال رسالة "جاري التحقق" لحين انتهاء العملية في القاعدة
         status_msg = await update.message.reply_text("⏳ جاري التحقق من الكود...")
-        
-        # استدعاء المعالج من ملف activation_handler
         success, response_text = activation_handler.process_activation(uid, text)
-        
         if success:
-            # في حال النجاح: تعديل رسالة الانتظار وإظهار منيو البوت
             await status_msg.edit_text(f"🎊 {response_text}", parse_mode='HTML')
             await clean_and_show_menu(update, context, uid)
         else:
-            # في حال الفشل: إظهار سبب الخطأ (كود مستخدم أو خاطئ)
-            await status_msg.edit_text(response_text, parse_mode='HTML')
-return
-
-    if text.upper().startswith("SMO-"):
-        # إرسال رسالة "جاري التحقق" لحين انتهاء العملية في القاعدة
-        status_msg = await update.message.reply_text("⏳ جاري التحقق من الكود...")
-        
-        # استدعاء المعالج من ملف activation_handler
-        success, response_text = activation_handler.process_activation(uid, text)
-        
-        if success:
-            # في حال النجاح: تعديل رسالة الانتظار وإظهار منيو البوت
-            await status_msg.edit_text(f"🎊 {response_text}", parse_mode='HTML')
-            await clean_and_show_menu(update, context, uid)
-        else:
-            # في حال الفشل: إظهار سبب الخطأ (كود مستخدم أو خاطئ)
             await status_msg.edit_text(response_text, parse_mode='HTML')
         return
 
-    # 3. رد افتراضي إذا أرسل المستخدم نصاً عشوائياً لا يبدأ بـ / ولا يبدأ بـ SMO
     if text and not text.startswith("/"):
-        await update.message.reply_text(
-            "💡 لتفعيل اشتراكك، أرسل الكود مباشرة.\nمثال: <code>SMO-XXXXXX</code>", 
-            parse_mode='HTML'
+        msg = "💡 لتفعيل اشتراكك، أرسل الكود مباشرة.\nمثال: <code>SMO-XXXXXX</code>"
+        await update.message.reply_text(msg, parse_mode='HTML')
                 
                 # 3. تفعيل المستخدم وتعيين تاريخ الانتهاء
                 cur.execute("""
