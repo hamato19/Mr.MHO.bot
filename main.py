@@ -3,7 +3,7 @@ from performance_optimizer import quick_callback_response
 from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import config, database, services, keyboards, web_server, privacy_policy
-
+import activation_handler
 # إعدادات المراقبة
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -159,15 +159,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await clean_and_show_menu(update, context, uid)
         return
 
+
 def activate_user_with_code(user_id, code):
     """
-    تفعيل اشتراك المستخدم باستخدام كود من جدول activation_codes.
-    تقوم الدالة بالتحقق من الكود، حساب المدة، وتحديث حالة المستخدم والكود في خطوة واحدة.
+    هذه الدالة يناديها ملف activation_handler.py
+    مهمتها: فحص جدول activation_codes وتحديث جدول users
     """
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 1. التحقق من وجود الكود وأنه غير مستخدم (مع تجاهل حالة الأحرف)
+                # 1. البحث عن الكود (نستخدم UPPER لضمان قبول smo- مثل SMO-)
                 cur.execute(
                     "SELECT * FROM activation_codes WHERE UPPER(code) = UPPER(%s) AND is_used = FALSE", 
                     (code.strip(),)
@@ -177,33 +178,31 @@ def activate_user_with_code(user_id, code):
                 if not code_data:
                     return False, "⚠️ الكود غير صالح أو مستخدم مسبقاً."
                 
-                # 2. استخراج عدد الأيام وحساب تاريخ انتهاء الاشتراك الجديد
+                # 2. استخراج الأيام وحساب التاريخ
                 days = code_data['days']
                 from datetime import datetime, timedelta
                 expiry_date = datetime.now() + timedelta(days=days)
                 
-                # 3. تحديث بيانات المستخدم في جدول users
+                # 3. تفعيل المستخدم وتعيين تاريخ الانتهاء
                 cur.execute("""
                     UPDATE users 
                     SET is_activated = TRUE, expiry_date = %s 
                     WHERE user_id = %s
                 """, (expiry_date, str(user_id)))
                 
-                # 4. تحديث حالة الكود ليصبح (مستخدماً) وتسجيل من استخدمه
+                # 4. وسم الكود بأنه "استُخدم" لمنع تكرار تفعيله
                 cur.execute("""
                     UPDATE activation_codes 
                     SET is_used = TRUE, used_by = %s 
                     WHERE code = %s
                 """, (str(user_id), code_data['code']))
                 
-                # حفظ التغييرات نهائياً في قاعدة البيانات
                 conn.commit()
                 return True, f"✅ تم التفعيل بنجاح لمدة {days} يوم."
-
     except Exception as e:
         import logging
-        logging.error(f"Error in activation logic: {e}")
-        return False, "❌ حدث خطأ فني أثناء التفعيل."
+        logging.error(f"Database Activation Error: {e}")
+        return False, "❌ خطأ في قاعدة البيانات أثناء التفعيل."
 
 def get_user_details(user_id):
     """جلب تفاصيل المستخدم للتأكد من حالة التفعيل"""
