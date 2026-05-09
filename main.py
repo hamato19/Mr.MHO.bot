@@ -161,10 +161,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("📋 <b>قنواتك المرتبطة حالياً:</b>", parse_mode='HTML', reply_markup=keyboards.get_entities_keyboard(ents))
 
         elif data == 'add_channel':
-            # نتحقق إذا كان المستخدم مفعلاً أو هو الأدمن (أنت)
             if is_owner or (user and user.get('is_activated')):
-                await query.edit_message_text(
-                    "📢 <b>ربط قناة جديدة:</b>\n\nاضغط على الزر أدناه لاختيار القناة. تأكد أن البوت مشرف في القناة ليتمكن من العمل.",
+                # 1. حذف الرسالة القديمة لتنظيف الشاشة
+                try: await query.message.delete()
+                except: pass
+
+                # 2. إرسال رسالة جديدة تماماً تطلب القناة
+                await context.bot.send_message(
+                    chat_id=uid,
+                    text="📢 <b>ربط قناة جديدة:</b>\n\nاضغط على الزر الكبير بالأسفل لاختيار القناة وتفويض البوت.",
                     parse_mode='HTML',
                     reply_markup=keyboards.get_request_channel_keyboard()
                 )
