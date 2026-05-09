@@ -64,7 +64,7 @@ async def get_main_menu(uid, bot_username="bot"):
 # --- قائمة خيارات الاشتراك (نظام الـ Web App لمنع النصوص الزائدة) ---
 def get_subscription_options():
     # استبدل الرابط أدناه برابط صفحة التفعيل (iframe) الخاصة بك
-    webapp_url = "https://yourdomain.com/activate" 
+    webapp_url = "https://sumoualarqam.netlify.app/" 
     
     kb = [
         [InlineKeyboardButton("💳 اشترك الآن", url="https://sumoualarqam.com/")],
