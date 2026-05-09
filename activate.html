@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سمو الأرقام - بوابة التفعيل</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        /* الهوية البصرية الرسمية لسمو الأرقام */
+        :root {
+            --bg-dark: #020617; /* اللون الكحلي العميق للموقع */
+            --gold-light: #fde68a;
+            --gold-dark: #b45309;
+            --accent-blue: #3b82f6;
+            --card-glass: rgba(15, 23, 42, 0.8);
+        }
+
+        body {
+            font-family: 'Cairo', 'Segoe UI', Tahoma, sans-serif;
+            background-color: var(--bg-dark);
+            /* إضافة خلفية الشبكة التقنية (Grid) المحاكية للموقع */
+            background-image: 
+                linear-gradient(rgba(59, 130, 246, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
+            background-size: 30px 30px;
+            color: white;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* تأثير التوهج في الخلفية */
+        body::before {
+            content: "";
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+            top: -50px;
+            right: -50px;
+            z-index: -1;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 420px;
+            background: var(--card-glass);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 28px;
+            padding: 40px 25px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .logo-area {
+            margin-bottom: 30px;
+        }
+
+        .logo-area h1 {
+            font-size: 32px;
+            font-weight: 900;
+            margin: 0;
+            background: linear-gradient(to bottom, #fff 30%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+        }
+
+        .logo-area span {
+            color: #d4af37; /* اللون الذهبي */
+            display: block;
+            font-size: 14px;
+            letter-spacing: 5px;
+            margin-top: 5px;
+            text-transform: uppercase;
+        }
+
+        .status-badge {
+            display: inline-block;
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: var(--accent-blue);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 18px;
+            color: #e2e8f0;
+            margin-bottom: 30px;
+            font-weight: 500;
+        }
+
+        .input-group {
+            position: relative;
+            margin-bottom: 25px;
+        }
+
+        input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 18px;
+            color: #fff;
+            font-size: 22px;
+            text-align: center;
+            outline: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-sizing: border-box;
+            letter-spacing: 2px;
+        }
+
+        input:focus {
+            border-color: #d4af37;
+            box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.15);
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .btn-activate {
+            width: 100%;
+            background: linear-gradient(135deg, #d4af37 0%, #fde68a 100%);
+            color: #451a03;
+            border: none;
+            border-radius: 16px;
+            padding: 18px;
+            font-size: 18px;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: 0 10px 20px rgba(212, 175, 55, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .btn-activate:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px rgba(212, 175, 55, 0.3);
+        }
+
+        .btn-activate:active {
+            transform: scale(0.98);
+        }
+
+        .footer {
+            margin-top: 30px;
+        }
+
+        .footer a {
+            color: #94a3b8;
+            text-decoration: none;
+            font-size: 13px;
+            transition: color 0.3s;
+        }
+
+        .footer a:hover {
+            color: #d4af37;
+        }
+
+        .glow-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #10b981;
+            border-radius: 50%;
+            margin-left: 8px;
+            box-shadow: 0 0 10px #10b981;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="container">
+        <div class="logo-area">
+            <h1>سمو الأرقام</h1>
+            <span></span>
+        </div>
+
+        <div class="status-badge">
+            <span class="glow-dot"></span> نظام التفعيل الذكي متصل
+        </div>
+
+        <h2>اكتب كود التفعيل</h2>
+
+        <div class="input-group">
+            <input type="text" id="coupon" placeholder="SMO-XXXX" autocomplete="off" spellcheck="false">
+        </div>
+
+        <button class="btn-activate" onclick="handleActivation()">تفعيل </button>
+
+        <div class="footer">
+            <a href="https://sumoualarqam.com/" target="_blank">العودة للموقع الرسمي للمؤسسة</a>
+        </div>
+    </div>
+
+    <script>
+        const webapp = window.Telegram.WebApp;
+        webapp.expand();
+        webapp.ready();
+
+        // تطبيق اهتزاز خفيف عند لمس الأزرار
+        function handleActivation() {
+            const codeValue = document.getElementById('coupon').value.trim();
+            if (!codeValue) {
+                webapp.HapticFeedback.notificationOccurred('error');
+                webapp.showAlert("يرجى تزويدنا بكود التفعيل أولاً");
+                return;
+            }
+
+            webapp.HapticFeedback.impactOccurred('heavy');
+            webapp.sendData(codeValue);
+            webapp.close();
+        }
+    </script>
+</body>
+</html>
