@@ -96,9 +96,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         elif data == 'tok': # توليد رمز جديد
             new_token = secrets.token_hex(8).upper()
-            # السطر 99 بعد التعديل
-           database.update_user_secret_token(uid, new_token)
-
+            database.update_user_secret_token(uid, new_token)
             webhook_text = services.format_webhook_links(uid)
             msg = await context.bot.send_message(chat_id=uid, text=f"🔐 <b>تم تحديث رمز الأمان!</b>\nالروابط الجديدة:\n\n<code>{webhook_text}</code>", parse_mode='HTML')
             context.user_data['temp_msg_ids'].append(msg.message_id)
