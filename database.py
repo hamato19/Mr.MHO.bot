@@ -250,3 +250,35 @@ def update_user_status(user_id, status):
     except Exception as e:
         logging.error(f"Error updating user status: {e}")
         return False
+
+def get_user_profile(telegram_id):
+    """
+    البحث عن مستخدم في قاعدة بيانات Neon باستخدام عمود user_id (bigint)
+    """
+    conn = get_connection() # تأكد أن هذه الدالة ترجع اتصال Neon الخاص بك
+    try:
+        cursor = conn.cursor()
+        
+        # 1. تنظيف المدخلات وتحويلها لرقم صحيح (Integer) ليتطابق مع نوع bigint
+        target_id = int(str(telegram_id).strip())
+        
+        # 2. الاستعلام من جدول users في عمود user_id
+        # تأكد من أسماء الأعمدة الأخرى (is_activated, expiry_date) حسب جدولك
+        query = "SELECT user_id, is_activated, expiry_date FROM users WHERE user_id = %s"
+        cursor.execute(query, (target_id,))
+        
+        row = cursor.fetchone()
+        
+        if row:
+            return {
+                'user_id': row[0],
+                'is_activated': bool(row[1]),
+                'expiry_date': row[2]
+            }
+        return None
+    except Exception as e:
+        print(f"❌ خطأ في الاستعلام من قاعدة البيانات: {e}")
+        return None
+    finally:
+        cursor.close()
+        conn.close()
