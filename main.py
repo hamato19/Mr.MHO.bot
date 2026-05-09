@@ -3,7 +3,6 @@ from telegram import Update, ReplyKeyboardRemove, InlineKeyboardButton, InlineKe
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import config, database, services, keyboards, web_server, privacy_policy
 import activation_handler
-
 # إعدادات المراقبة
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -100,11 +99,30 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             webhook_text = services.format_webhook_links(uid)
             
         elif data == 'tok': # توليد رمز جديد
+            # 1. تنظيف الرسائل القديمة أولاً
+            await clear_temp_messages(context, uid)
+            
+            # 2. توليد الرمز وتحديث قاعدة البيانات
             new_token = secrets.token_hex(8).upper()
             database.update_user_secret_token(uid, new_token)
+            
+            # 3. جلب الروابط المحدثة
             webhook_text = services.format_webhook_links(uid)
-            msg = await context.bot.send_message(chat_id=uid, text=f"🔐 <b>تم تحديث رمز الأمان!</b>\nالروابط الجديدة:\n\n<code>{webhook_text}</code>", parse_mode='HTML')
-            context.user_data['temp_msg_ids'].append(msg.message_id)
+            
+            # 4. تحديث نفس الرسالة بدلاً من إرسال واحدة جديدة
+            # تأكد من وضع await قبل keyboards.get_main_menu
+            keyboard = await keyboards.get_main_menu(uid) 
+            
+            await query.edit_message_text(
+                text=f"🔐 <b>تم تحديث رمز الأمان بنجاح!</b>\n\n"
+                     f"الروابط الجديدة:\n<code>{webhook_text}</code>\n\n"
+                     f"استخدم هذه الروابط في TradingView الآن.",
+                parse_mode='HTML',
+                reply_markup=keyboard
+            )
+            
+            # 5. الرد على التلجرام لإيقاف علامة التحميل على الزر
+            await query.answer("تم التحديث ✅")
             return
 
         elif data == 'chs': # قنواتي
