@@ -94,9 +94,30 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         elif data == 'tok': # توليد رمز جديد
+            # 1. فك تعليق الزر فوراً (ضروري جداً للاستجابة)
+            await query.answer()
+            
+            # 2. العمليات البرمجية
             new_token = secrets.token_hex(8).upper()
+            
+            # ملاحظة: إذا كانت الدالة في database.py معرفة بـ async def أضف await هنا
             database.update_user_secret_token(uid, new_token)
+            
             webhook_text = services.format_webhook_links(uid)
+            
+            # 3. إرسال الرسالة الجديدة
+            msg = await context.bot.send_message(
+                chat_id=uid, 
+                text=f"🔐 <b>تم تحديث رمز الأمان!</b>\n\nالروابط الجديدة:\n<code>{webhook_text}</code>", 
+                parse_mode='HTML'
+            )
+            
+            # 4. إضافة المعرف للمصفوفة (تأكد من تعريفها أولاً)
+            if 'temp_msg_ids' not in context.user_data:
+                context.user_data['temp_msg_ids'] = []
+            context.user_data['temp_msg_ids'].append(msg.message_id)
+            
+            return
 
         elif data == 'chs': # قنواتي
             ents = database.get_user_entities(uid)
