@@ -52,12 +52,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # استقبال بيانات التفعيل من الـ Web App (Iframe)
     if update.message.web_app_data:
-        code = update.message.web_app_data.data.strip().upper()
-        success, res = activation_handler.process_activation(uid, code)
-        msg = await update.message.reply_text(f"{'🎉' if success else '❌'} {res}", parse_mode='HTML')
-        await asyncio.sleep(2)
-        try: await update.message.delete()
-        except: pass
+    if update.message and update.message.text:
+        text = update.message.text.strip().upper()
+        # تخزين رسالة المستخدم لحذفها لاحقاً ضمن نظام التنظيف
+        context.user_data['temp_msg_ids'].append(update.message.message_id)
+
+        # التحقق إذا كان النص يمثل كود تفعيل سمو الأرقام
+        if text.startswith("SMO-"):
+            # إرسال رسالة انتظار لتأكيد بدء الفحص في قاعدة البيانات
+            checking_msg = await update.message.reply_text("⏳ جاري التحقق من الكود في قاعدة البيانات...")
+            
+            # مخاطبة قاعدة البيانات عبر المعالج
+            success, res = activation_handler.process_activation(uid, text)
+            
+            # إظهار النتيجة للمستخدم (🎉 نجاح أو ❌ خطأ)
+            msg = await update.message.reply_text(f"{'🎉' if success else '❌'} {res}", parse_mode='HTML')
+            
+            # حذف رسالة "جاري التحقق" فوراً بعد استلام الرد
+            try: await checking_msg.delete()
+            except: pass
+            
+            # تسجيل رسالة البوت في قائمة التنظيف
+            context.user_data['temp_msg_ids'].append(msg.message_id)
+            
+            # في حال نجاح التفعيل، ننتظر ثانية ثم نعيد عرض القائمة الرئيسية مفعلة
+            if success:
+                await asyncio.sleep(1)
+                await clean_and_show_menu(update, context, uid)
+            return
+
+    # معالجة طلبات ربط القنوات (Chat Shared) - ضروري لبقاء عمل البوت
+    if update.message and update.message.chat_shared:
+        database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
         await clean_and_show_menu(update, context, uid)
         return
 
