@@ -1,5 +1,5 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, KeyboardButtonRequestChat
-import config
+import config,WebAppInfo
 
 # --- دالة مساعدة لزر العودة الموحد ---
 def back_home_button():
