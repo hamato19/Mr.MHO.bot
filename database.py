@@ -165,7 +165,7 @@ def add_subscription_code(code, days=30):
         logging.error(f"❌ Error in add_subscription_code: {e}")
         return False
 
-def activate_user_with_code(user_id, code):
+
 def activate_user_with_code(user_id, code):
     """تفعيل اشتراك المستخدم بعد التحقق من الكود"""
     try:
