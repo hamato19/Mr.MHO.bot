@@ -3,6 +3,7 @@ from psycopg2.extras import RealDictCursor
 import config
 import logging
 import secrets
+import traceback
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 
@@ -167,43 +168,63 @@ def add_subscription_code(code, days=30):
 
 
 def activate_user_with_code(user_id, code):
-    """تفعيل اشتراك المستخدم بعد التحقق من الكود"""
+    """تفعيل اشتراك المستخدم مع نظام متطور لاكتشاف الأخطاء"""
     try:
+        # التأكد من مدخلات الكود
+        if not code or not str(code).strip():
+            return False, "⚠️ يرجى إدخال كود صالح."
+
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # التعديل هنا: استخدام UPPER و strip لضمان مطابقة الكود بدقة
+                # 🔍 1. محاولة البحث عن الكود
                 cur.execute(
-                    "SELECT * FROM activation_codes WHERE UPPER(code) = UPPER(%s) AND is_used = FALSE", 
+                    "SELECT * FROM activation_codes WHERE UPPER(code) = UPPER(%s)", 
                     (code.strip(),)
                 )
                 code_data = cur.fetchone()
                 
+                # فحص حالة الكود
                 if not code_data:
-                    return False, "⚠️ الكود غير صالح أو مستخدم مسبقاً."
+                    return False, "❌ الكود غير موجود في النظام."
+                if code_data['is_used']:
+                    return False, f"⚠️ هذا الكود استخدمه مستخدم آخر (ID: {code_data.get('used_by')})"
                 
+                # 📅 2. تجهيز التواريخ
                 days = code_data['days']
-                # حساب تاريخ الانتهاء بناءً على وقت التفعيل الحالي
+                from datetime import datetime, timedelta
                 expiry_date = datetime.now() + timedelta(days=days)
                 
-                # 1. تحديث بيانات المستخدم
-                cur.execute("""
-                    UPDATE users 
-                    SET is_activated = TRUE, expiry_date = %s 
-                    WHERE user_id = %s
-                """, (expiry_date, str(user_id)))
+                # 🛠️ 3. تنفيذ التحديثات (Transaction)
+                try:
+                    # تحديث المستخدم
+                    cur.execute("""
+                        UPDATE users 
+                        SET is_activated = TRUE, expiry_date = %s 
+                        WHERE user_id = %s
+                    """, (expiry_date, str(user_id)))
+                    
+                    # تحديث الكود
+                    cur.execute("""
+                        UPDATE activation_codes 
+                        SET is_used = TRUE, used_by = %s 
+                        WHERE code = %s
+                    """, (str(user_id), code_data['code']))
+                    
+                    conn.commit()
+                    return True, f"✅ تم التفعيل بنجاح لمدة {days} يوم.\nينتهي في: {expiry_date.strftime('%Y-%m-%d')}"
                 
-                # 2. تحديث حالة الكود في جدول الأكواد (استخدام اسم الكود الأصلي من القاعدة)
-                cur.execute("""
-                    UPDATE activation_codes 
-                    SET is_used = TRUE, used_by = %s 
-                    WHERE code = %s
-                """, (str(user_id), code_data['code']))
-                
-                conn.commit()
-                return True, f"✅ تم التفعيل بنجاح لمدة {days} يوم."
+                except Exception as db_error:
+                    conn.rollback() # إلغاء التعديلات في حال فشل أحدها
+                    raise db_error
+
     except Exception as e:
-        logging.error(f"Error in activation: {e}")
-        return False, "❌ حدث خطأ فني أثناء التفعيل."
+        # طباعة الخطأ كاملاً في سجلات Render (Logs)
+        import logging
+        error_msg = traceback.format_exc()
+        logging.error(f"‼️ خطأ جسيم في التفعيل:\n{error_msg}")
+        
+        # رسالة مبسطة للمستخدم
+        return False, f"❌ فشل النظام: {str(e)}"
 
 def get_user_details(user_id):
     try:
