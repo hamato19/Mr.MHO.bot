@@ -92,11 +92,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg = await context.bot.send_message(chat_id=uid, text=f"🌐 <b>روابط الويب هوك:</b>\n\n<code>{webhook_text}</code>", parse_mode='HTML')
             context.user_data['temp_msg_ids'].append(msg.message_id)
             return
-
-        elif data == 'tok': # توليد رمز جديد
-            new_token = secrets.token_hex(8).upper()
-            database.update_user_secret_token(uid, new_token)
-            webhook_text = services.format_webhook_links(uid)
             
         elif data == 'tok': # توليد رمز جديد
             # 1. تنظيف الرسائل القديمة أولاً
