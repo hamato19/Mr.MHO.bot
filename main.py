@@ -94,31 +94,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
             
         elif data == 'tok': # توليد رمز جديد
-            # 1. تنظيف الرسائل القديمة أولاً
-            await clear_temp_messages(context, uid)
-            
-            # 2. توليد الرمز وتحديث قاعدة البيانات
             new_token = secrets.token_hex(8).upper()
             database.update_user_secret_token(uid, new_token)
-            
-            # 3. جلب الروابط المحدثة
             webhook_text = services.format_webhook_links(uid)
-            
-            # 4. تحديث نفس الرسالة بدلاً من إرسال واحدة جديدة
-            # تأكد من وضع await قبل keyboards.get_main_menu
-            keyboard = await keyboards.get_main_menu(uid) 
-            
-            await query.edit_message_text(
-                text=f"🔐 <b>تم تحديث رمز الأمان بنجاح!</b>\n\n"
-                     f"الروابط الجديدة:\n<code>{webhook_text}</code>\n\n"
-                     f"استخدم هذه الروابط في TradingView الآن.",
-                parse_mode='HTML',
-                reply_markup=keyboard
-            )
-            
-            # 5. الرد على التلجرام لإيقاف علامة التحميل على الزر
-            await query.answer("تم التحديث ✅")
-            return
 
         elif data == 'chs': # قنواتي
             ents = database.get_user_entities(uid)
