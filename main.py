@@ -158,7 +158,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ تم ربط القناة بنجاح!", reply_markup=ReplyKeyboardRemove())
         await clean_and_show_menu(update, context, uid)
 return
-        
     if text.upper().startswith("SMO-"):
         # إرسال رسالة انتظار للمستخدم
         status_msg = await update.message.reply_text("⏳ جاري التحقق من الكود...")
