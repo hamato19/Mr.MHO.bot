@@ -67,7 +67,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                       parse_mode='HTML', reply_markup=keyboards.get_back_home())
         context.user_data['awaiting_code'] = True 
         return
-
+    if query.data == 'check_by_id':
+        await query.message.reply_text("من فضلك، أرسل الآن رقم الـ ID الخاص بك للتحقق:")
+        # تفعيل "حالة الانتظار" لكي يعرف البوت أن الرسالة القادمة هي ID
+        context.user_data['awaiting_id_check'] = True
+        return
     # --- لوحة التحكم للأدمن ---
     if is_owner:
         if data == 'adm':
