@@ -128,19 +128,48 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
              await query.message.reply_text("📢 اضغط الزر أدناه لاختيار القناة:", reply_markup=keyboards.get_request_channel_keyboard())
              return
 
-    # 4. لوحة الأدمن
+    # --- 4. لوحة الأدمن ---
     if is_owner:
         if data == 'adm':
             t, a, c = database.get_admin_dashboard_stats()
             await query.edit_message_text(f"👮 <b>لوحة الأدمن</b>\n\n👤 المستخدمين: {t}\n✅ المشتركين: {a}\n🎫 الأكواد: {c}", parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
             return
+
         elif data == 'adm_u':
             users = database.get_all_users()
             await query.edit_message_text("👥 <b>إدارة المستخدمين:</b>", parse_mode='HTML', reply_markup=keyboards.get_users_management_keyboard(users))
             return
+
+        # 👇 تضاف الإضافة المطورة هنا مباشرة 👇
+     elif data.startswith('view_u_'):
+            target_uid = int(data.split('_')[2]) 
+            target_user = database.get_user_profile(target_uid) 
+            
+            if target_user:
+                await clear_temp_messages(context, uid)
+                status = "✅ مفعل" if target_user.get('is_activated') else "❌ غير مفعل"
+                exp = services.get_time_remaining(target_user.get('expiry_date'))
+                
+                user_entities = database.get_user_entities(target_uid)
+                channels_text = "\n".join([f"🔹 <code>{e['entity_id']}</code>" for e in user_entities]) if user_entities else "لا توجد قنوات."
+                webhook_links = services.format_webhook_links(target_uid)
+
+                text = (
+                    f"👤 <b>تفاصيل المستخدم:</b>\n"
+                    f"🆔 ID: <code>{target_uid}</code>\n"
+                    f"👤 الاسم: {target_user.get('full_name')}\n"
+                    f"📊 الحالة: {status}\n"
+                    f"⏳ الصلاحية: {exp}\n\n"
+                    f"📢 <b>القنوات:</b>\n{channels_text}\n\n"
+                    f"🌐 <b>الويب هوك:</b>\n<code>{webhook_links}</code>"
+                )
+                await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboards.get_user_control_keyboard(target_uid))
+            return
+
         elif data == 'adm_gen_menu':
             await query.edit_message_text("🔑 <b>توليد أكواد:</b>", parse_mode='HTML', reply_markup=keyboards.get_generation_menu())
             return
+            
         elif data.startswith('gen_'):
             days = int(data.split('_')[1])
             code = f"SMO-{secrets.token_hex(4).upper()}"
