@@ -54,7 +54,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # تسجيل رسالة المستخدم للتنظيف
     context.user_data['temp_msg_ids'].append(update.message.message_id)
+    if update.message.text:
+        raw_text = update.message.text.strip()
 
+        # 1. فحص زر الإلغاء (يجب أن يكون قبل تحويل النص لـ UPPER)
+        if raw_text == "🔙 إلغاء والعودة للقائمة":
+            from telegram import ReplyKeyboardRemove
+            await update.message.reply_text("🔄 جاري العودة للقائمة الرئيسية...", reply_markup=ReplyKeyboardRemove())
+            await clean_and_show_menu(update, context, uid)
+            return
+    
     # أ: التعامل مع أكواد التفعيل (SMO-)
     if update.message.text:
         text = update.message.text.strip().upper()
