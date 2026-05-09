@@ -159,47 +159,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await clean_and_show_menu(update, context, uid)
         return
 
-   if text.upper().startswith("SMO-"):
-        # إرسال رسالة انتظار
+if text.upper().startswith("SMO-"):
+        # إرسال رسالة "جاري التحقق" لحين انتهاء العملية في القاعدة
         status_msg = await update.message.reply_text("⏳ جاري التحقق من الكود...")
         
         # استدعاء المعالج من ملف activation_handler
         success, response_text = activation_handler.process_activation(uid, text)
         
         if success:
+            # في حال النجاح: تعديل رسالة الانتظار وإظهار منيو البوت
             await status_msg.edit_text(f"🎊 {response_text}", parse_mode='HTML')
-            # تحديث القائمة لإظهار الخيارات الجديدة للمشترك
             await clean_and_show_menu(update, context, uid)
         else:
+            # في حال الفشل: إظهار سبب الخطأ (كود مستخدم أو خاطئ)
             await status_msg.edit_text(response_text, parse_mode='HTML')
         return
 
-    # 3. رد افتراضي إذا أرسل المستخدم نصاً عشوائياً
-    if not text.startswith("/"):
-        await update.message.reply_text("💡 لتفعيل اشتراكك، أرسل الكود مباشرة (مثال: <code>SMO-XXXXXX</code>)", parse_mode='HTML')
-
-def activate_user_with_code(user_id, code):
-    """
-    هذه الدالة يناديها ملف activation_handler.py
-    مهمتها: فحص جدول activation_codes وتحديث جدول users
-    """
-    try:
-        with get_db() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 1. البحث عن الكود (نستخدم UPPER لضمان قبول smo- مثل SMO-)
-                cur.execute(
-                    "SELECT * FROM activation_codes WHERE UPPER(code) = UPPER(%s) AND is_used = FALSE", 
-                    (code.strip(),)
-                )
-                code_data = cur.fetchone()
-                
-                if not code_data:
-                    return False, "⚠️ الكود غير صالح أو مستخدم مسبقاً."
-                
-                # 2. استخراج الأيام وحساب التاريخ
-                days = code_data['days']
-                from datetime import datetime, timedelta
-                expiry_date = datetime.now() + timedelta(days=days)
+    # 3. رد افتراضي إذا أرسل المستخدم نصاً عشوائياً لا يبدأ بـ / ولا يبدأ بـ SMO
+    if text and not text.startswith("/"):
+        await update.message.reply_text(
+            "💡 لتفعيل اشتراكك، أرسل الكود مباشرة.\nمثال: <code>SMO-XXXXXX</code>", 
+            parse_mode='HTML'
                 
                 # 3. تفعيل المستخدم وتعيين تاريخ الانتهاء
                 cur.execute("""
