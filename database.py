@@ -15,6 +15,7 @@ def get_db():
     """إنشاء اتصال بقاعدة البيانات مع ضمان الإغلاق التلقائي"""
     conn = None
     try:
+        # يستخدم DATABASE_URL من متغيرات البيئة في Render
         conn = psycopg2.connect(config.DATABASE_URL, sslmode='require')
         yield conn
     except Exception as e:
@@ -60,13 +61,11 @@ def get_all_users():
     try:
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # التعديل هنا: الترتيب بواسطة user_id بدلاً من id
                 cur.execute("SELECT user_id, is_activated, expiry_date FROM users ORDER BY user_id DESC LIMIT 20")
                 return cur.fetchall()
     except Exception as e:
         logging.error(f"Error fetching users: {e}")
         return []
-
 
 def register_user_if_not_exists(user_id):
     """تسجيل مستخدم جديد تلقائياً"""
@@ -84,14 +83,17 @@ def register_user_if_not_exists(user_id):
         logging.error(f"Error registering user: {e}")
 
 def get_user_profile(user_id):
-    """جلب بيانات حساب المستخدم"""
+    """جلب بيانات حساب المستخدم من عمود user_id (bigint)"""
     try:
+        # تنظيف وتحويل الـ ID لضمان مطابقته لنوع bigint في Neon
+        target_id = str(user_id).strip()
+        
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT * FROM users WHERE user_id = %s", (str(user_id),))
+                cur.execute("SELECT * FROM users WHERE user_id = %s", (target_id,))
                 return cur.fetchone()
     except Exception as e:
-        logging.error(f"Error fetching profile: {e}")
+        logging.error(f"❌ خطأ في جلب بيانات المستخدم {user_id}: {e}")
         return None
 
 # --- 3. إدارة التوكن والقنوات ---
@@ -109,7 +111,7 @@ def update_user_secret_token(user_id):
         logging.error(f"Error updating token: {e}")
         return None
 
-def add_entity(user_id, entity_id, entity_name):
+def add_user_entity(user_id, entity_id, entity_name):
     """ربط قناة أو مجموعة جديدة"""
     try:
         with get_db() as conn:
@@ -151,7 +153,7 @@ def delete_entity(user_id, entity_id):
 # --- 4. نظام التفعيل وتوليد الأكواد ---
 
 def add_subscription_code(code, days=30):
-    """إضافة الكود الجاهز (المرسل من main.py) إلى قاعدة البيانات"""
+    """إضافة الكود الجاهز إلى قاعدة البيانات"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -168,76 +170,48 @@ def add_subscription_code(code, days=30):
 
 
 def activate_user_with_code(user_id, code):
-    """تفعيل اشتراك المستخدم مع نظام متطور لاكتشاف الأخطاء"""
+    """تفعيل اشتراك المستخدم"""
     try:
-        # التأكد من مدخلات الكود
         if not code or not str(code).strip():
             return False, "⚠️ يرجى إدخال كود صالح."
 
         with get_db() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                # 🔍 1. محاولة البحث عن الكود
                 cur.execute(
                     "SELECT * FROM activation_codes WHERE UPPER(code) = UPPER(%s)", 
                     (code.strip(),)
                 )
                 code_data = cur.fetchone()
                 
-                # فحص حالة الكود
                 if not code_data:
                     return False, "❌ الكود غير موجود في النظام."
                 if code_data['is_used']:
-                    return False, f"⚠️ هذا الكود استخدمه مستخدم آخر (ID: {code_data.get('used_by')})"
+                    return False, f"⚠️ هذا الكود مستخدم مسبقاً."
                 
-                # 📅 2. تجهيز التواريخ
                 days = code_data['days']
-                from datetime import datetime, timedelta
                 expiry_date = datetime.now() + timedelta(days=days)
                 
-                # 🛠️ 3. تنفيذ التحديثات (Transaction)
-                try:
-                    # تحديث المستخدم
-                    cur.execute("""
-                        UPDATE users 
-                        SET is_activated = TRUE, expiry_date = %s 
-                        WHERE user_id = %s
-                    """, (expiry_date, str(user_id)))
-                    
-                    # تحديث الكود
-                    cur.execute("""
-                        UPDATE activation_codes 
-                        SET is_used = TRUE, used_by = %s 
-                        WHERE code = %s
-                    """, (str(user_id), code_data['code']))
-                    
-                    conn.commit()
-                    return True, f"✅ تم التفعيل بنجاح لمدة {days} يوم.\nينتهي في: {expiry_date.strftime('%Y-%m-%d')}"
+                cur.execute("""
+                    UPDATE users 
+                    SET is_activated = TRUE, expiry_date = %s 
+                    WHERE user_id = %s
+                """, (expiry_date, str(user_id)))
                 
-                except Exception as db_error:
-                    conn.rollback() # إلغاء التعديلات في حال فشل أحدها
-                    raise db_error
+                cur.execute("""
+                    UPDATE activation_codes 
+                    SET is_used = TRUE, used_by = %s 
+                    WHERE code = %s
+                """, (str(user_id), code_data['code']))
+                
+                conn.commit()
+                return True, f"✅ تم التفعيل لمدة {days} يوم.\nينتهي في: {expiry_date.strftime('%Y-%m-%d')}"
 
     except Exception as e:
-        # طباعة الخطأ كاملاً في سجلات Render (Logs)
-        import logging
-        error_msg = traceback.format_exc()
-        logging.error(f"‼️ خطأ جسيم في التفعيل:\n{error_msg}")
-        
-        # رسالة مبسطة للمستخدم
+        logging.error(f"‼️ خطأ في التفعيل: {traceback.format_exc()}")
         return False, f"❌ فشل النظام: {str(e)}"
 
-def get_user_details(user_id):
-    try:
-        with get_db() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT user_id, is_activated, expiry_date FROM users WHERE user_id = %s", (user_id,))
-                return cur.fetchone()
-    except Exception as e:
-        logging.error(f"Error fetching user details: {e}")
-        return None
-
 def update_user_status(user_id, status):
-    """تحديث حالة المستخدم (تفعيل أو إيقاف) في قاعدة البيانات"""
+    """تحديث حالة المستخدم (تفعيل أو إيقاف)"""
     try:
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -250,35 +224,3 @@ def update_user_status(user_id, status):
     except Exception as e:
         logging.error(f"Error updating user status: {e}")
         return False
-
-def get_user_profile(telegram_id):
-    """
-    البحث عن مستخدم في قاعدة بيانات Neon باستخدام عمود user_id (bigint)
-    """
-    conn = get_connection() # تأكد أن هذه الدالة ترجع اتصال Neon الخاص بك
-    try:
-        cursor = conn.cursor()
-        
-        # 1. تنظيف المدخلات وتحويلها لرقم صحيح (Integer) ليتطابق مع نوع bigint
-        target_id = int(str(telegram_id).strip())
-        
-        # 2. الاستعلام من جدول users في عمود user_id
-        # تأكد من أسماء الأعمدة الأخرى (is_activated, expiry_date) حسب جدولك
-        query = "SELECT user_id, is_activated, expiry_date FROM users WHERE user_id = %s"
-        cursor.execute(query, (target_id,))
-        
-        row = cursor.fetchone()
-        
-        if row:
-            return {
-                'user_id': row[0],
-                'is_activated': bool(row[1]),
-                'expiry_date': row[2]
-            }
-        return None
-    except Exception as e:
-        print(f"❌ خطأ في الاستعلام من قاعدة البيانات: {e}")
-        return None
-    finally:
-        cursor.close()
-        conn.close()
