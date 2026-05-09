@@ -157,7 +157,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
         await update.message.reply_text("✅ تم ربط القناة بنجاح!", reply_markup=ReplyKeyboardRemove())
         await clean_and_show_menu(update, context, uid)
-return
+        return
+
     if text.upper().startswith("SMO-"):
         status_msg = await update.message.reply_text("⏳ جاري التحقق من الكود...")
         success, response_text = activation_handler.process_activation(uid, text)
@@ -171,6 +172,7 @@ return
     if text and not text.startswith("/"):
         msg = "💡 لتفعيل اشتراكك، أرسل الكود مباشرة.\nمثال: <code>SMO-XXXXXX</code>"
         await update.message.reply_text(msg, parse_mode='HTML')
+
 
                 
                 # 3. تفعيل المستخدم وتعيين تاريخ الانتهاء
