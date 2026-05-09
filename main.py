@@ -97,9 +97,23 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == 'tok': # توليد رمز جديد
             new_token = secrets.token_hex(8).upper()
             database.update_user_secret_token(uid, new_token)
+            
+            # جلب الروابط المحدثة
             webhook_text = services.format_webhook_links(uid)
-            msg = await context.bot.send_message(chat_id=uid, text=f"🔐 <b>تم تحديث رمز الأمان!</b>\nالروابط الجديدة:\n\n<code>{webhook_text}</code>", parse_mode='HTML')
-            context.user_data['temp_msg_ids'].append(msg.message_id)
+            
+            # تعديل الرسالة الحالية لإظهار الرمز الجديد مع القائمة الرئيسية
+            await query.edit_message_text(
+                text=f"🔐 <b>تم تحديث رمز الأمان بنجاح!</b>\n\n"
+                     f"الروابط الجديدة والمحدثة:\n"
+                     f"<code>{webhook_text}</code>\n\n"
+                     f"يمكنك الآن استخدام الروابط أعلاه في TradingView.",
+                parse_mode='HTML',
+                # هنا نستدعي دالة القائمة الرئيسية التي تستخدمها في ملف keyboards
+                reply_markup=keyboards.main_menu(uid) 
+            )
+            
+            # اختياري: إظهار تنبيه سريع أعلى الشاشة
+            await query.answer("تم التحديث بنجاح ✅")
             return
 
         elif data == 'chs': # قنواتي
