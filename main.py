@@ -231,4 +231,5 @@ async def main():
     await asyncio.Event().wait()
 
 if __name__ == '__main__':
+    print("--- Starting Bot Check ---")
     asyncio.run(main())
