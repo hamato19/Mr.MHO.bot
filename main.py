@@ -133,7 +133,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ تم ربط القناة بنجاح!", reply_markup=ReplyKeyboardRemove())
         await clean_and_show_menu(update, context, uid)
         return
-
+         التحقق من حالة "انتظار إدخال ID" (Awaiting ID Check)
+    if context.user_data.get('awaiting_id_check'):
+        await process_id_verification(update, context, uid, text)
+        return
     # 2. معالجة كود التفعيل
     if text.upper().startswith("SMO-"):
         status_msg = await update.message.reply_text("⏳ جاري التحقق من الكود...")
