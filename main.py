@@ -1,4 +1,5 @@
 import logging, asyncio, secrets, os
+from performance_optimizer import quick_callback_response
 from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import config, database, services, keyboards, web_server, privacy_policy
