@@ -8,7 +8,7 @@ import activation_handler
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- 1. الدالة المساعدة للتنظيف الذكي ---
+# --- 1. نظام التنظيف الذكي وحماية الواجهة ---
 async def clear_temp_messages(context, uid):
     """حذف كافة الرسائل والملفات المؤقتة المخزنة في ذاكرة الجلسة"""
     if 'temp_msg_ids' in context.user_data:
@@ -20,7 +20,7 @@ async def clear_temp_messages(context, uid):
         context.user_data['temp_msg_ids'] = []
 
 async def clean_and_show_menu(update_or_query, context, uid):
-    """عرض القائمة الرئيسية مع تنظيف شامل"""
+    """عرض القائمة الرئيسية مع تنظيف شامل لضمان ثبات الواجهة"""
     await clear_temp_messages(context, uid)
     user = database.get_user_profile(uid)
     bot_info = await context.bot.get_me()
@@ -45,17 +45,42 @@ async def clean_and_show_menu(update_or_query, context, uid):
             if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
             context.user_data['temp_msg_ids'].append(sent_msg.message_id)
 
-# --- 2. المعالجات (Handlers) ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- 2. معالج الرسائل والـ Web App (نظام التفعيل الصامت) ---
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
-    await clear_temp_messages(context, uid)
-    user = database.get_user_profile(uid)
-    if not user:
-        await update.message.reply_text(privacy_policy.DISCLAIMER_TEXT, parse_mode='HTML', reply_markup=keyboards.get_disclaimer_keyboard())
-    else:
+    
+    # استقبال بيانات التفعيل من الـ Web App (Iframe)
+    if update.message.web_app_data:
+        code = update.message.web_app_data.data.strip().upper()
+        success, res = activation_handler.process_activation(uid, code)
+        msg = await update.message.reply_text(f"{'🎉' if success else '❌'} {res}", parse_mode='HTML')
+        await asyncio.sleep(2)
+        try: await update.message.delete()
+        except: pass
         await clean_and_show_menu(update, context, uid)
+        return
 
+    # استقبال الرسائل النصية العادية (تنظيف تلقائي)
+    if update.message:
+        context.user_data['temp_msg_ids'].append(update.message.message_id)
+        
+        # التعامل مع ربط القنوات
+        if update.message.chat_shared:
+            database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
+            await clean_and_show_menu(update, context, uid)
+            return
+
+        # معالجة يدوية للأكواد
+        text = update.message.text.strip().upper() if update.message.text else ""
+        if text.startswith("SMO-"):
+            success, res = activation_handler.process_activation(uid, text)
+            msg = await update.message.reply_text(f"{'🎉' if success else '❌'} {res}", parse_mode='HTML')
+            context.user_data['temp_msg_ids'].append(msg.message_id)
+            await asyncio.sleep(2)
+            await clean_and_show_menu(update, context, uid)
+
+# --- 3. معالج الأزرار التفاعلية (Callbacks) ---
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
@@ -68,126 +93,74 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: await query.answer()
     except: pass
 
+    # القائمة الرئيسية
     if data == 'home':
         await clean_and_show_menu(query, context, uid)
         return
 
+    # تجديد الاشتراك
     if data == 'ren':
-        context.user_data['awaiting_code'] = True 
-        sub_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("💳 اشتراك الآن", url="https://sumoualarqam.com/")],
-            [InlineKeyboardButton("🎫 ادخل كود التفعيل", callback_data='await_msg')],
-            [InlineKeyboardButton("⬅️ رجوع", callback_data='home')]
-        ])
-        await query.edit_message_text("🔄 <b>تفعيل الاشتراك:</b>\nأرسل كود التفعيل هنا مباشرة.", parse_mode='HTML', reply_markup=sub_markup)
+        await query.edit_message_text("🔄 <b>تفعيل الاشتراك:</b>\nاختر وسيلة التفعيل أدناه:", parse_mode='HTML', reply_markup=keyboards.get_subscription_options())
         return
 
+    # نظام الحماية: التحقق من الاشتراك قبل تنفيذ الوظائف
     if is_owner or (user and user.get('is_activated')):
-        if data == 'acc':
+        if data == 'acc': # حسابي
             expiry = services.get_time_remaining(user.get('expiry_date')) if user and not is_owner else "دائم"
             await query.edit_message_text(f"👤 <b>بيانات حسابك:</b>\n🆔 ID: <code>{uid}</code>\n⏳ الانتهاء: {expiry}", parse_mode='HTML', reply_markup=keyboards.get_back_home())
-            return
-
-        elif data == 'wh':
-            # 🛑 تنظيف الروابط القديمة قبل إرسال الجديدة
-            await clear_temp_messages(context, uid)
+        
+        elif data == 'wh': # الويب هوك
             webhook_text = services.format_webhook_links(uid)
-            msg = await context.bot.send_message(chat_id=uid, text=f"🌐 <b>روابط الويب هوك:</b>\n\n<code>{webhook_text}</code>", parse_mode='HTML')
-            context.user_data['temp_msg_ids'].append(msg.message_id)
-            return
+            await query.edit_message_text(f"🌐 <b>روابط الويب هوك الخاصة بك:</b>\n\n<code>{webhook_text}</code>", parse_mode='HTML', reply_markup=keyboards.get_back_home())
             
-        elif data == 'tok':
-            # 🛑 تنظيف الروابط القديمة قبل إرسال الجديدة
-            await clear_temp_messages(context, uid)
+        elif data == 'tok': # توليد رمز جديد
             new_token = secrets.token_hex(8).upper()
             database.update_user_secret_token(uid, new_token)
             webhook_text = services.format_webhook_links(uid)
-            msg = await context.bot.send_message(chat_id=uid, text=f"🔐 <b>تم تحديث الرمز بنجاح!</b>\n\nروابطك الجديدة:\n<code>{webhook_text}</code>", parse_mode='HTML')
-            context.user_data['temp_msg_ids'].append(msg.message_id)
-            return
+            await query.edit_message_text(f"🔐 <b>تم تحديث الرمز بنجاح!</b>\n\nروابطك الجديدة:\n<code>{webhook_text}</code>", parse_mode='HTML', reply_markup=keyboards.get_back_home())
 
-        elif data == 'chs':
+        elif data == 'chs': # القنوات
             ents = database.get_user_entities(uid)
             await query.edit_message_text("📋 <b>قنواتك المرتبطة:</b>", parse_mode='HTML', reply_markup=keyboards.get_entities_keyboard(ents))
-            return
 
-        elif data == 'add_channel':
-             msg = await query.message.reply_text("📢 اضغط الزر أدناه لاختيار القناة المراد ربطها:", reply_markup=keyboards.get_request_channel_keyboard())
-             context.user_data['temp_msg_ids'].append(msg.message_id)
-             return
+        elif data == 'add_channel': # إضافة قناة
+             await query.edit_message_text("📢 اضغط الزر أدناه لاختيار القناة المراد ربطها:", reply_markup=keyboards.get_request_channel_keyboard())
 
-    # لوحة الأدمن
+    # --- لوحة الأدمن (إصلاح زر توليد الأكواد) ---
     if is_owner:
-        if data == 'adm':
+        if data == 'adm': # المنيو الرئيسي للأدمن
             t, a, c = database.get_admin_dashboard_stats()
-            await query.edit_message_text(f"👮 <b>لوحة الأدمن</b>\n\n👤 المستخدمين: {t}\n✅ المشتركين: {a}\n🎫 الأكواد: {c}", parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
-            return
-        elif data == 'adm_u':
-            users = database.get_all_users()
-            await query.edit_message_text("👥 <b>إدارة المستخدمين:</b>", parse_mode='HTML', reply_markup=keyboards.get_users_management_keyboard(users))
-            return
-        elif data.startswith('view_u_'):
-            target_uid = int(data.split('_')[2]) 
-            target_user = database.get_user_profile(target_uid) 
-            if target_user:
-                status = "✅ مفعل" if target_user.get('is_activated') else "❌ غير مفعل"
-                exp = services.get_time_remaining(target_user.get('expiry_date'))
-                user_entities = database.get_user_entities(target_uid)
-                channels_text = "\n".join([f"🔹 <code>{e['entity_id']}</code>" for e in user_entities]) if user_entities else "لا توجد قنوات."
-                webhook_links = services.format_webhook_links(target_uid)
-                text = (f"👤 <b>تفاصيل المستخدم:</b>\n🆔 ID: <code>{target_uid}</code>\n👤 الاسم: {target_user.get('full_name')}\n📊 الحالة: {status}\n⏳ الصلاحية: {exp}\n\n📢 <b>القنوات:</b>\n{channels_text}\n\n🌐 <b>الويب هوك:</b>\n<code>{webhook_links}</code>")
-                await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboards.get_user_control_keyboard(target_uid))
-            return
-        elif data.startswith('gen_'):
-            # 🛑 تنظيف الأكواد السابقة قبل إرسال الجديد
-            await clear_temp_messages(context, uid)
+            await query.edit_message_text(f"👮 <b>لوحة التحكم:</b>\n👤 المستخدمين: {t}\n✅ المشتركين: {a}\n🎫 الأكواد: {c}", parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
+        
+        elif data == 'adm_gen_menu': # منيو توليد الأكواد
+            await query.edit_message_text("🔑 <b>توليد أكواد اشتراك:</b>\nاختر المدة المطلوبة:", parse_mode='HTML', reply_markup=keyboards.get_generation_menu())
+            
+        elif data.startswith('gen_'): # تنفيذ التوليد
             days = int(data.split('_')[1])
             code = f"SMO-{secrets.token_hex(4).upper()}"
             database.add_subscription_code(code, days)
-            msg = await query.message.reply_text(f"✅ كود جديد ({days} يوم):\n<code>{code}</code>", parse_mode='HTML')
-            context.user_data['temp_msg_ids'].append(msg.message_id)
-            return
+            await query.edit_message_text(f"✅ <b>تم إنشاء كود بنجاح:</b>\n\nالمدة: {days} يوم\nالكود: <code>{code}</code>", parse_mode='HTML', reply_markup=keyboards.get_back_home())
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# --- 4. تشغيل النظام ---
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
-    if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
-    
-    # تخزين رسالة المستخدم الحالية لحذفها لاحقاً
-    if update.message:
-        context.user_data['temp_msg_ids'].append(update.message.message_id)
-
-    # استقبال القناة
-    if update.message.chat_shared:
-        database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
-        # 🛑 تنظيف كل شيء قبل العودة للمنيو
+    await clear_temp_messages(context, uid)
+    user = database.get_user_profile(uid)
+    if not user:
+        await update.message.reply_text(privacy_policy.DISCLAIMER_TEXT, parse_mode='HTML', reply_markup=keyboards.get_disclaimer_keyboard())
+    else:
         await clean_and_show_menu(update, context, uid)
-        return
-
-    # استقبال النصوص (أكواد التفعيل)
-    if update.message.text:
-        text = update.message.text.strip()
-        if text.upper().startswith("SMO-") or context.user_data.get('awaiting_code'):
-            context.user_data['awaiting_code'] = False
-            
-            # معالجة التفعيل
-            success, res = activation_handler.process_activation(uid, text.upper())
-            
-            # إرسال النتيجة ثم تنظيفها بعد ثوانٍ والعودة للمنيو
-            msg = await update.message.reply_text(f"{'🎉' if success else '❌'} {res}", parse_mode='HTML')
-            context.user_data['temp_msg_ids'].append(msg.message_id)
-            
-            await asyncio.sleep(3) # إعطاء فرصة للقراءة
-            await clean_and_show_menu(update, context, uid)
 
 async def main():
-    database.init_db()
-    await web_server.start_server()
+    database.init_db() # قاعدة البيانات
+    await web_server.start_server() # نظام الويب هوك
     app = Application.builder().token(config.BOT_TOKEN).build()
+    
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.ALL, handle_message))
     
-    logger.info("🚀 سمو الأرقام بدأ العمل بنظام تنظيف النصوص...")
+    logger.info("🚀 سمو الأرقام يعمل بكامل طاقته ونظام الحماية مفعل.")
     async with app:
         await app.initialize()
         await app.start()
