@@ -30,14 +30,47 @@ def get_subscription_options():
 # 3. القائمة الرئيسية
 async def get_main_menu(uid, bot_username="bot"):
     kb = [
-        [InlineKeyboardButton("👤 حسابي", callback_data='acc'), InlineKeyboardButton("🔄 تجديد الاشتراك", callback_data='ren')],
-        [InlineKeyboardButton("📢 إضافة قناة", callback_data='add_channel'), InlineKeyboardButton("📋 قنواتي", callback_data='chs')],
-        [InlineKeyboardButton("🌐 رابط الويب هوك", callback_data='wh'), InlineKeyboardButton("🔄 توليد رمز الأمان", callback_data='tok')],
-        [InlineKeyboardButton("🤖 إضافة البوت مشرف", url=f"https://t.me/{bot_username}?startchannel=true&admin=post_messages")],
-        [InlineKeyboardButton("☎️ الدعم الفني", url=config.SUPPORT_LINK)]
+        # الصف الأول: بيانات الحساب وتجديد الاشتراك
+        [
+            InlineKeyboardButton("👤 حسابي", callback_data='acc'), 
+            InlineKeyboardButton("🔄 تجديد الاشتراك", callback_data='ren')
+        ],
+        # الصف الثاني: إدارة القنوات
+        [
+            InlineKeyboardButton("📢 إضافة قناة", callback_data='add_channel'), 
+            InlineKeyboardButton("📋 قنواتي", callback_data='chs')
+        ],
+        # الصف الثالث: الربط التقني والأمان
+        [
+            InlineKeyboardButton("🌐 رابط الويب هوك", callback_data='wh'), 
+            InlineKeyboardButton("🔄 توليد رمز الأمان", callback_data='tok')
+        ],
+        # الصف الرابع: إضافة البوت للقنوات
+        [
+            InlineKeyboardButton("🤖 إضافة البوت مشرف", url=f"https://t.me/{bot_username}?startchannel=true&admin=post_messages+edit_messages+delete_messages")
+        ],
+        # الصف الخامس: الدعم الفني
+        [
+            InlineKeyboardButton("☎️ الدعم الفني", url=config.SUPPORT_LINK)
+        ]
     ]
+
+    # إضافة زر لوحة التحكم للمالك فقط
     if str(uid) == str(config.ADMIN_ID):
         kb.append([InlineKeyboardButton("👮 لوحة الأدمن", callback_data='adm')])
+
+    return InlineKeyboardMarkup(kb)
+
+# --- قائمة خيارات الاشتراك (نظام الـ Web App لمنع النصوص الزائدة) ---
+def get_subscription_options():
+    # استبدل الرابط أدناه برابط صفحة التفعيل (iframe) الخاصة بك
+    webapp_url = "https://yourdomain.com/activate" 
+    
+    kb = [
+        [InlineKeyboardButton("💳 اشترك الآن", url="https://sumoualarqam.com/")],
+        [InlineKeyboardButton("🎫 ادخل كود التفعيل", web_app=WebAppInfo(url=webapp_url))],
+        [InlineKeyboardButton("⬅️ رجوع", callback_data='home')]
+    ]
     return InlineKeyboardMarkup(kb)
 
 # 4. لوحة الأدمن
