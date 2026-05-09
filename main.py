@@ -159,19 +159,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await clean_and_show_menu(update, context, uid)
 return
     if text.upper().startswith("SMO-"):
-    status_msg = await update.message.reply_text("⏳ جاري التحقق...")
-    success, response_text = activation_handler.process_activation(uid, text)
-    if success:
-        await status_msg.edit_text(f"🎊 {response_text}", parse_mode='HTML')
-        await clean_and_show_menu(update, context, uid)
-    else:
-        await status_msg.edit_text(response_text, parse_mode='HTML')
-    return
+        status_msg = await update.message.reply_text("⏳ جاري التحقق من الكود...")
+        success, response_text = activation_handler.process_activation(uid, text)
+        if success:
+            await status_msg.edit_text(f"🎊 {response_text}", parse_mode='HTML')
+            await clean_and_show_menu(update, context, uid)
+        else:
+            await status_msg.edit_text(response_text, parse_mode='HTML')
+        return
 
- if text and not text.startswith("/"):
-    msg = "💡 لتفعيل اشتراكك، أرسل الكود مباشرة.\nمثال: <code>SMO-XXXXXX</code>"
-    await update.message.reply_text(msg, parse_mode='HTML')
-
+    if text and not text.startswith("/"):
+        msg = "💡 لتفعيل اشتراكك، أرسل الكود مباشرة.\nمثال: <code>SMO-XXXXXX</code>"
+        await update.message.reply_text(msg, parse_mode='HTML')
 
                 
                 # 3. تفعيل المستخدم وتعيين تاريخ الانتهاء
