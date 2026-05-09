@@ -160,9 +160,17 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ents = database.get_user_entities(uid)
             await query.edit_message_text("📋 <b>قنواتك المرتبطة حالياً:</b>", parse_mode='HTML', reply_markup=keyboards.get_entities_keyboard(ents))
 
-        elif data == 'add_channel': # زر إضافة قناة
-             await query.edit_message_text("📢 اضغط الزر أدناه لاختيار القناة وتفويض البوت:", reply_markup=keyboards.get_request_channel_keyboard())
-
+        elif data == 'add_channel':
+            # نتحقق إذا كان المستخدم مفعلاً أو هو الأدمن (أنت)
+            if is_owner or (user and user.get('is_activated')):
+                await query.edit_message_text(
+                    "📢 <b>ربط قناة جديدة:</b>\n\nاضغط على الزر أدناه لاختيار القناة. تأكد أن البوت مشرف في القناة ليتمكن من العمل.",
+                    parse_mode='HTML',
+                    reply_markup=keyboards.get_request_channel_keyboard()
+                )
+            else:
+                await query.answer("⚠️ عذراً، هذه الميزة للمشتركين فقط.", show_alert=True)
+            return
     # --- لوحة الأدمن (التحكم الكامل) ---
     if is_owner:
         if data == 'adm': # الإحصائيات
