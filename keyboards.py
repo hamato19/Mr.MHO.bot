@@ -15,13 +15,17 @@ def get_disclaimer_keyboard():
 
 # 2. واجهة التفعيل والتجديد
 def get_subscription_options():
-    return InlineKeyboardMarkup([
+    keyboard = [
         [
             InlineKeyboardButton("💳 اشتراك الآن", url="https://sumoualarqam.com/"),
             InlineKeyboardButton("🎫 ادخل كود التفعيل", callback_data='ren')
         ],
-        back_home_button()
-    ])
+        [
+            # الزر الجديد لطلب التحقق عبر المعرف
+            InlineKeyboardButton("🔍 لدي اشتراك فعال (أدخل الـ ID)", callback_data='check_by_id')
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 # 3. القائمة الرئيسية
 async def get_main_menu(uid, bot_username="bot"):
