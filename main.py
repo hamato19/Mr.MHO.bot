@@ -4,6 +4,7 @@ from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 import config, database, services, keyboards, web_server, privacy_policy
 import activation_handler
+
 # إعدادات المراقبة
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -137,7 +138,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             expiry = services.get_time_remaining(user.get('expiry_date')) if user else "غير محدد"
             await query.edit_message_text(f"👤 <b>بيانات حسابك:</b>\n🆔 ID: <code>{uid}</code>\n⏳ الصلاحية: {expiry}", parse_mode='HTML', reply_markup=keyboards.get_back_home())
 
-        # معالجة قنواتي (عرض وحذف)
         elif data.startswith('v_'):
             ch_id = data.replace('v_', '')
             await query.answer(f"المعرف: {ch_id}", show_alert=True)
@@ -173,43 +173,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = "💡 لتفعيل اشتراكك، أرسل الكود مباشرة.\nمثال: <code>SMO-XXXXXX</code>"
         await update.message.reply_text(msg, parse_mode='HTML')
 
-
-                
-                # 3. تفعيل المستخدم وتعيين تاريخ الانتهاء
-                cur.execute("""
-                    UPDATE users 
-                    SET is_activated = TRUE, expiry_date = %s 
-                    WHERE user_id = %s
-                """, (expiry_date, str(user_id)))
-                
-                # 4. وسم الكود بأنه "استُخدم" لمنع تكرار تفعيله
-                cur.execute("""
-                    UPDATE activation_codes 
-                    SET is_used = TRUE, used_by = %s 
-                    WHERE code = %s
-                """, (str(user_id), code_data['code']))
-                
-                conn.commit()
-                return True, f"✅ تم التفعيل بنجاح لمدة {days} يوم."
-    except Exception as e:
-        import logging
-        logging.error(f"Database Activation Error: {e}")
-        return False, "❌ خطأ في قاعدة البيانات أثناء التفعيل."
-
-def get_user_details(user_id):
-    """جلب تفاصيل المستخدم للتأكد من حالة التفعيل"""
-    try:
-        with get_db() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT user_id, is_activated, expiry_date FROM users WHERE user_id = %s", (str(user_id),))
-                return cur.fetchone()
-    except Exception as e:
-        import logging
-        logging.error(f"Error fetching user details: {e}")
-        return None
-
-
-
 async def main():
     database.init_db()
     asyncio.create_task(web_server.start_server())
@@ -223,5 +186,4 @@ async def main():
     await asyncio.Event().wait()
 
 if __name__ == '__main__':
-    print("--- Starting Bot Check ---")
     asyncio.run(main())
