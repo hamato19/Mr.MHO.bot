@@ -231,10 +231,60 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             t, a, c = database.get_admin_dashboard_stats()
             await query.edit_message_text(f"👮 <b>لوحة التحكم:</b>\n\n👤 إجمالي المستخدمين: {t}\n✅ المشتركين النشطين: {a}\n🎫 الأكواد غير المستخدمة: {c}", parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
         
-        elif data == 'adm_us': # إدارة المستخدمين (إصلاح الزر)
-            users_list = database.get_all_users_brief() # تأكد من وجود هذه الدالة في database.py
-            await query.edit_message_text(f"👥 <b>قائمة المستخدمين:</b>\n{users_list}", parse_mode='HTML', reply_markup=keyboards.get_back_home())
+    elif data == 'adm_u':
+        try:
+            users = database.get_all_users()
+            if not users:
+                await query.answer("ℹ️ لا يوجد مستخدمون حالياً", show_alert=True)
+                return
 
+            await query.edit_message_text(
+                "👥 <b>قائمة إدارة المستخدمين:</b>\n\nاختر مستخدماً لعرض تفاصيله:",
+                parse_mode='HTML',
+                reply_markup=keyboards.get_users_management_keyboard(users)
+            )
+            await query.answer()
+        except Exception as e:
+            logging.error(f"Error in adm_u: {e}")
+            await query.answer("⚠️ فشل جلب القائمة", show_alert=True)
+        return
+
+    # 2. عرض تفاصيل المستخدم
+    elif data.startswith('user_info_'):
+        try:
+            target_uid = data.replace('user_info_', '')
+            user = database.get_user_profile(target_uid)
+            user_channels = database.get_user_entities(target_uid)
+            
+            if user:
+                channels_text = "\n".join([f"🔹 <code>{ch['entity_id']}</code> ({ch.get('entity_name', 'قناة')})" for ch in user_channels]) if user_channels else "❌ لا توجد قنوات"
+
+                start_date = user['created_at'].strftime('%Y-%m-%d') if user.get('created_at') else "غير مسجل"
+                expiry_date = user['expiry_date'].strftime('%Y-%m-%d') if user.get('expiry_date') else "غير مفعل"
+                status = "✅ نشط" if user.get('is_activated') else "❌ غير نشط"
+
+                text = (
+                    f"👤 <b>تفاصيل المستخدم:</b>\n"
+                    f"━━━━━━━━━━━━━━━\n"
+                    f"🆔 <b>ID:</b> <code>{target_uid}</code>\n"
+                    f"📊 <b>الحالة:</b> {status}\n\n"
+                    f"📅 <b>التسجيل:</b> {start_date}\n"
+                    f"⏳ <b>الانتهاء:</b> {expiry_date}\n\n"
+                    f"📢 <b>القنوات:</b>\n{channels_text}\n"
+                    f"━━━━━━━━━━━━━━━"
+                )
+
+                await query.edit_message_text(
+                    text,
+                    parse_mode='HTML',
+                    reply_markup=keyboards.get_user_control_keyboard(target_uid, user.get('is_activated'))
+                )
+            await query.answer()
+        except Exception as e:
+            logging.error(f"Error in user_info: {e}")
+            await query.answer("⚠️ خطأ في عرض التفاصيل", show_alert=True)
+        return
+        
         elif data == 'adm_gen_menu': # قائمة توليد الأكواد
             await query.edit_message_text("🔑 <b>توليد أكواد اشتراك:</b>\nاختر مدة الكود المراد إنشاؤه:", parse_mode='HTML', reply_markup=keyboards.get_generation_menu())
             
