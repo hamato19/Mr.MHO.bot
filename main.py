@@ -283,7 +283,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logging.error(f"Error in user_info: {e}")
             await query.answer("⚠️ خطأ في عرض التفاصيل", show_alert=True)
-    return
+        return
         
             # --- كود إدارة الأكواد وتوليدها (داخل دالة handle_callback) ---
    elif data == 'adm_gen_menu':
