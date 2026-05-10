@@ -286,8 +286,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return
         
             # --- كود إدارة الأكواد وتوليدها (داخل دالة handle_callback) ---
-    elif data == 'adm_gen_menu':
-         await query.edit_message_text(
+         elif data == 'adm_gen_menu':
+              await query.edit_message_text(
             "🔑 <b>توليد أكواد اشتراك:</b>\nاختر مدة الكود المراد إنشاؤه:", 
             parse_mode='HTML', 
             reply_markup=keyboards.get_generation_menu()
