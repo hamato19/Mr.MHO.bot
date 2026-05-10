@@ -100,7 +100,33 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try: await query.answer()
     except: pass
+   if data == 'accept_tos':
+        # 1. تسجيل المستخدم (إذا كان جديداً) أو تحديث بياناته
+        database.add_new_user(uid) 
+        
+        # 2. جلب بيانات المستخدم من قاعدة البيانات للتحقق من هويته (ID) واشتراكه
+        user = database.get_user_profile(uid)
+        now = datetime.now()
 
+        # التحقق: هل الحساب مفعل؟ وهل تاريخ الانتهاء موجود ومستقبلي؟
+        is_active = user.get('is_activated') if user else False
+        expiry_date = user.get('expiry_date') if user else None
+        
+        # شرط التجاوز الوحيد: مفعل وتاريخ الصلاحية أكبر من الوقت الحالي
+   if is_active and expiry_date and expiry_date > now:
+            await query.message.reply_text(f"✅ تم التحقق من الحساب (ID: {uid})\nأهلاً بك مجدداً في سمو الأرقام.")
+            await clean_and_show_menu(query, context, uid)
+        else:
+            # إذا كان جديداً، أو منتهياً، أو غير مفعل: يُحبس في هذه الرسالة
+            status_text = "حسابك منتهي الاشتراك" if is_active else "الحساب غير مفعل"
+            await query.message.reply_text(
+                f"✅ <b>تم قبول السياسة.</b>\n\n⚠️ {status_text}.\n"
+                f"لا يمكنك الدخول للقائمة الرئيسية إلا بعد التفعيل.\n\n"
+                f"إرسال <b>كود التفعيل</b> الآن (مثال: <code>SMO-XXXX</code>):",
+                parse_mode='HTML',
+                reply_markup=keyboards.get_subscription_options() # إظهار أزرار الاشتراك والدعم فقط
+            )
+        return
     # القائمة الرئيسية والعودة
     if data == 'home':
         await clean_and_show_menu(query, context, uid)
