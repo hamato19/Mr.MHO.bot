@@ -97,13 +97,20 @@ def get_generation_menu():
 
 # 6. إدارة المستخدمين
 def get_users_management_keyboard(users):
-    kb = []
-    for user in users:
-        status = "✅" if user.get('is_activated') else "❌"
-        kb.append([InlineKeyboardButton(f"👤 {user['user_id']} | {status}", callback_data=f"view_u_{user['user_id']}")])
-    kb.append([InlineKeyboardButton("🔙 عودة للأدمن", callback_data='adm')])
-    kb.append(back_home_button())
-    return InlineKeyboardMarkup(kb)
+    keyboard = []
+    if users:
+        for user in users:
+            uid = user['user_id']
+            # تحديد رمز الحالة (مفعل أو غير مفعل) بجانب الـ ID
+            status_icon = "✅" if user.get('is_activated') else "❌"
+            keyboard.append([InlineKeyboardButton(f"{status_icon} ID: {uid}", callback_data=f"user_info_{uid}")])
+    else:
+        keyboard.append([InlineKeyboardButton("Empty / لا يوجد مستخدمين", callback_data="none")])
+    
+    # أزرار العودة
+    keyboard.append([InlineKeyboardButton("🔙 العودة للوحة التحكم", callback_data="adm")])
+    keyboard.append([InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="home")])
+    return InlineKeyboardMarkup(keyboard)
 
 # 7. التحكم بالمستخدم (من قبل الأدمن)
 def get_user_control_keyboard(target_id, is_active):
