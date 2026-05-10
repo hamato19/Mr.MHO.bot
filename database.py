@@ -263,3 +263,56 @@ def get_user_entities(user_id):
     except Exception as e:
         logging.error(f"Error fetching user entities: {e}")
         return []
+
+def check_subscription(user_id):
+    """التحقق من حالة الاشتراك وتاريخ الانتهاء"""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT is_active, expiry_date 
+                    FROM users 
+                    WHERE user_id = %s
+                """, (str(user_id),))
+                result = cur.fetchone()
+                
+                if result:
+                    is_active, expiry_date = result
+                    # إذا كان الحساب معطل يدوياً أو التاريخ انتهى
+                    if not is_active or expiry_date < datetime.date.today():
+                        return False, expiry_date
+                    return True, expiry_date
+                return False, None
+    except Exception as e:
+        logging.error(f"Subscription Check Error: {e}")
+        return False, None
+
+def update_subscription(user_id, months=1):
+    """تجديد الاشتراك للمشترك"""
+    days = months * 30
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    UPDATE users 
+                    SET is_active = TRUE, 
+                        expiry_date = GREATEST(expiry_date, CURRENT_DATE) + INTERVAL '%s days'
+                    WHERE user_id = %s
+                """, (days, str(user_id)))
+                conn.commit()
+                return True
+    except Exception as e:
+        logging.error(f"Update Subscription Error: {e}")
+        return False
+
+def get_user_by_token(token):
+    """جلب بيانات المستخدم باستخدام الرمز السري"""
+    try:
+        with get_db() as conn:
+            # استخدام DictCursor يعيد البيانات كقاموس (Dictionary) لتسهيل التعامل معها
+            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+                cur.execute("SELECT user_id, secret_token FROM users WHERE secret_token = %s", (token,))
+                return cur.fetchone()
+    except Exception as e:
+        logging.error(f"Error fetching user by token: {e}")
+        return None
