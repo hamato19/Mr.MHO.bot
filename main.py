@@ -251,26 +251,28 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 2. عرض تفاصيل المستخدم
     elif data.startswith('user_info_'):
-        try:
+        try: # تأكد أن الـ t صغيرة ومزاحة 8 مسافات للداخل
             target_uid = data.replace('user_info_', '')
             user = database.get_user_profile(target_uid)
             user_channels = database.get_user_entities(target_uid)
             
             if user:
-                channels_text = "\n".join([f"🔹 <code>{ch['entity_id']}</code> ({ch.get('entity_name', 'قناة')})" for ch in user_channels]) if user_channels else "❌ لا توجد قنوات"
+                # تجهيز قائمة القنوات بشكل أنيق
+                channels_text = "\n".join([f"🔹 <code>{ch['entity_id']}</code> ({ch.get('entity_name', 'قناة')})" for ch in user_channels]) if user_channels else "❌ لا توجد قنوات مرتبطة"
 
+                # تنسيق التواريخ (مع التحقق من وجودها لتجنب الأخطاء)
                 start_date = user['created_at'].strftime('%Y-%m-%d') if user.get('created_at') else "غير مسجل"
                 expiry_date = user['expiry_date'].strftime('%Y-%m-%d') if user.get('expiry_date') else "غير مفعل"
-                status = "✅ نشط" if user.get('is_activated') else "❌ غير نشط"
+                status = "✅ نشط" if user.get('is_activated') else "❌ منتهي/غير نشط"
 
                 text = (
                     f"👤 <b>تفاصيل المستخدم:</b>\n"
                     f"━━━━━━━━━━━━━━━\n"
                     f"🆔 <b>ID:</b> <code>{target_uid}</code>\n"
                     f"📊 <b>الحالة:</b> {status}\n\n"
-                    f"📅 <b>التسجيل:</b> {start_date}\n"
-                    f"⏳ <b>الانتهاء:</b> {expiry_date}\n\n"
-                    f"📢 <b>القنوات:</b>\n{channels_text}\n"
+                    f"📅 <b>تاريخ التسجيل:</b> {start_date}\n"
+                    f"⏳ <b>تاريخ الانتهاء:</b> {expiry_date}\n\n"
+                    f"📢 <b>القنوات المرتبطة:</b>\n{channels_text}\n"
                     f"━━━━━━━━━━━━━━━"
                 )
 
@@ -279,24 +281,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     parse_mode='HTML',
                     reply_markup=keyboards.get_user_control_keyboard(target_uid, user.get('is_activated'))
                 )
+            else:
+                await query.answer("❌ تعذر العثور على بيانات المستخدم", show_alert=True)
+                
             await query.answer()
+            
         except Exception as e:
             logging.error(f"Error in user_info: {e}")
-            await query.answer("⚠️ خطأ في عرض التفاصيل", show_alert=True)
+            await query.answer("⚠️ حدث خطأ أثناء عرض التفاصيل", show_alert=True)
         return
-        
-            # --- كود إدارة الأكواد وتوليدها (داخل دالة handle_callback) ---
-   elif data == 'adm_gen_menu':
-        try:
-            await query.edit_message_text(
-                "🔑 <b>توليد أكواد اشتراك:</b>\nاختر مدة الكود المراد إنشاؤه:", 
-                parse_mode='HTML', 
-                reply_markup=keyboards.get_generation_menu()
-            )
-            await query.answer()
-        except Exception as e:
-            logging.error(f"Error in adm_gen_menu: {e}")
-        return 
 
    elif data.startswith('gen_'):
         try:
