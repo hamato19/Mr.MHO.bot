@@ -264,8 +264,23 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             re    # --- لوحة الأدمن (التحكم الكامل) ---
     if is_owner:
         if data == 'adm': # الإحصائيات
-            t, a, c = database.get_admin_dashboard_stats()
-            await query.edit_message_text(f"👮 <b>لوحة التحكم:</b>\n\n👤 إجمالي المستخدمين: {t}\n✅ المشتركين النشطين: {a}\n🎫 الأكواد غير المستخدمة: {c}", parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
+            # 1. جلب الإحصائيات كقاموس
+            stats = database.get_admin_dashboard_stats()
+            
+            # 2. استخراج القيم من القاموس
+            t = stats.get('total', 0)
+            a = stats.get('active', 0)
+            c = stats.get('codes', 0)
+            
+            # 3. عرض الرسالة بالأرقام الصحيحة
+            await query.edit_message_text(
+                f"👮 <b>لوحة التحكم:</b>\n\n"
+                f"👤 إجمالي المستخدمين: {t}\n"
+                f"✅ المشتركين النشطين: {a}\n"
+                f"🎫 الأكواد غير المستخدمة: {c}", 
+                parse_mode='HTML', 
+                reply_markup=keyboards.get_admin_keyboard()
+            )
             return
 
         elif data == 'adm_u': # قائمة المستخدمين
