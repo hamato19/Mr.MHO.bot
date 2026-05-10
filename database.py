@@ -225,3 +225,21 @@ def update_user_status(user_id, status):
     except Exception as e:
         logging.error(f"Error updating user status: {e}")
         return False
+
+def add_new_user(user_id):
+    """إضافة مستخدم جديد لقاعدة البيانات إذا لم يكن موجوداً (تستخدم مع زر الموافقة)"""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                query = """
+                INSERT INTO users (user_id, is_activated, created_at)
+                VALUES (%s, FALSE, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) DO NOTHING;
+                """
+                cur.execute(query, (str(user_id),))
+                conn.commit()
+                logging.info(f"👤 تم تسجيل مستخدم جديد بنجاح: {user_id}")
+                return True
+    except Exception as e:
+        logging.error(f"❌ Database Error in add_new_user: {e}")
+        return False
