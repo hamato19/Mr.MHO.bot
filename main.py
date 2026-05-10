@@ -286,16 +286,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
            return
         
         elif data == 'adm_gen_menu':
-        # لاحظ الفراغ هنا (4 مسافات أو Tab)
             await query.edit_message_text(
             "🔑 <b>توليد أكواد اشتراك:</b>\nاختر مدة الكود المراد إنشاؤه:", 
             parse_mode='HTML', 
             reply_markup=keyboards.get_generation_menu()
         )
-        return
+        return 
 
     elif data.startswith('gen_'):
-        # لاحظ الفراغ هنا أيضاً
         days = int(data.split('_')[1])
         code = f"SMO-{secrets.token_hex(4).upper()}"
         database.add_subscription_code(code, days)
