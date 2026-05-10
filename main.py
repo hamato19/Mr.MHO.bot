@@ -287,11 +287,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
             # --- كود إدارة الأكواد وتوليدها (داخل دالة handle_callback) ---
          elif data == 'adm_gen_menu':
-              await query.edit_message_text(
-            "🔑 <b>توليد أكواد اشتراك:</b>\nاختر مدة الكود المراد إنشاؤه:", 
-            parse_mode='HTML', 
-            reply_markup=keyboards.get_generation_menu()
-        )
+        try:
+            await query.edit_message_text(
+                "🔑 <b>توليد أكواد اشتراك:</b>\nاختر مدة الكود المراد إنشاؤه:", 
+                parse_mode='HTML', 
+                reply_markup=keyboards.get_generation_menu()
+            )
+            await query.answer()
+        except Exception as e:
+            logging.error(f"Error in adm_gen_menu: {e}")
         return 
 
    elif data.startswith('gen_'):
