@@ -285,8 +285,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("⚠️ خطأ في عرض التفاصيل", show_alert=True)
     return
         
-        elif data == 'adm_gen_menu':
-            await query.edit_message_text(
+            # --- كود إدارة الأكواد وتوليدها (داخل دالة handle_callback) ---
+    elif data == 'adm_gen_menu':
+        await query.edit_message_text(
             "🔑 <b>توليد أكواد اشتراك:</b>\nاختر مدة الكود المراد إنشاؤه:", 
             parse_mode='HTML', 
             reply_markup=keyboards.get_generation_menu()
@@ -294,18 +295,32 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return 
 
     elif data.startswith('gen_'):
-        days = int(data.split('_')[1])
-        code = f"SMO-{secrets.token_hex(4).upper()}"
-        database.add_subscription_code(code, days)
-        await query.edit_message_text(f"✅ تم إنشاء كود بنجاح...")
+        try:
+            days = int(data.split('_')[1])
+            import secrets # تأكد من استيرادها في أعلى الملف
+            code = f"SMO-{secrets.token_hex(4).upper()}"
+            database.add_subscription_code(code, days)
+            await query.edit_message_text(
+                f"✅ <b>تم إنشاء كود بنجاح</b>\n\nالمدة: {days} يوم\nالكود: <code>{code}</code>\n\nأرسل الكود للمشترك لتفعيله.",
+                parse_mode='HTML',
+                reply_markup=keyboards.get_back_home()
+            )
+        except Exception as e:
+            logging.error(f"Error generating code: {e}")
+            await query.answer("⚠️ فشل إنشاء الكود", show_alert=True)
         return
-# --- 4. نقطة الانطلاق ---
+
+# --- 4. نقطة الانطلاق (خارج الدالة السابقة) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     await clear_temp_messages(context, uid)
     user = database.get_user_profile(uid)
     if not user:
-        await update.message.reply_text(privacy_policy.DISCLAIMER_TEXT, parse_mode='HTML', reply_markup=keyboards.get_disclaimer_keyboard())
+        await update.message.reply_text(
+            privacy_policy.DISCLAIMER_TEXT, 
+            parse_mode='HTML', 
+            reply_markup=keyboards.get_disclaimer_keyboard()
+        )
     else:
         await clean_and_show_menu(update, context, uid)
 
@@ -322,9 +337,13 @@ async def main():
     async with app:
         await app.initialize()
         await app.start()
+        # drop_pending_updates=True ضرورية لمنع تراكم الرسائل القديمة
         await app.updater.start_polling(drop_pending_updates=True)
-        while True: await asyncio.sleep(3600)
+        while True: 
+            await asyncio.sleep(3600)
 
 if __name__ == '__main__':
-    try: asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit): pass
+    try: 
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit): 
+        pass
