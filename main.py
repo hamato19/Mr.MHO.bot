@@ -100,33 +100,47 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try: await query.answer()
     except: pass
-   if data == 'accept_tos':
-        # 1. تسجيل المستخدم (إذا كان جديداً) أو تحديث بياناته
+    if data == 'accept_tos':
+        # 1. تسجيل المستخدم في قاعدة البيانات (أو التأكد من وجوده)
         database.add_new_user(uid) 
         
-        # 2. جلب بيانات المستخدم من قاعدة البيانات للتحقق من هويته (ID) واشتراكه
+        # 2. جلب بيانات المستخدم للتحقق من حالة الاشتراك والـ ID
         user = database.get_user_profile(uid)
+        from datetime import datetime
         now = datetime.now()
 
-        # التحقق: هل الحساب مفعل؟ وهل تاريخ الانتهاء موجود ومستقبلي؟
         is_active = user.get('is_activated') if user else False
         expiry_date = user.get('expiry_date') if user else None
         
-        # شرط التجاوز الوحيد: مفعل وتاريخ الصلاحية أكبر من الوقت الحالي
-   if is_active and expiry_date and expiry_date > now:
-            await query.message.reply_text(f"✅ تم التحقق من الحساب (ID: {uid})\nأهلاً بك مجدداً في سمو الأرقام.")
+        # شرط التجاوز: حساب مفعل + تاريخ انتهاء لم يأتِ بعد
+        if is_active and expiry_date and expiry_date > now:
+            await query.message.reply_text(f"✅ تم التحقق من الحساب (ID: <code>{uid}</code>)\nأهلاً بك مجدداً في سمو الأرقام.", parse_mode='HTML')
             await clean_and_show_menu(query, context, uid)
         else:
-            # إذا كان جديداً، أو منتهياً، أو غير مفعل: يُحبس في هذه الرسالة
-            status_text = "حسابك منتهي الاشتراك" if is_active else "الحساب غير مفعل"
+            # رسالة المنع إذا كان جديداً أو منتهياً
+            status_text = "حسابك منتهي الاشتراك" if is_active else "الحساب غير مفعل حالياً"
             await query.message.reply_text(
-                f"✅ <b>تم قبول السياسة.</b>\n\n⚠️ {status_text}.\n"
-                f"لا يمكنك الدخول للقائمة الرئيسية إلا بعد التفعيل.\n\n"
-                f"إرسال <b>كود التفعيل</b> الآن (مثال: <code>SMO-XXXX</code>):",
+                f"✅ <b>تم قبول السياسة بنجاح.</b>\n\n"
+                f"⚠️ {status_text}.\n"
+                f"لا يمكنك تجاوز هذه المرحلة والوصول للقائمة الرئيسية إلا بعد التفعيل.\n\n"
+                f"يرجى إرسال <b>كود التفعيل</b> الخاص بك الآن في الشات\n"
+                f"(مثال: <code>SMO-XXXX</code>):",
                 parse_mode='HTML',
-                reply_markup=keyboards.get_subscription_options() # إظهار أزرار الاشتراك والدعم فقط
+                reply_markup=keyboards.get_subscription_options() # أزرار الدعم والاشتراك فقط
             )
         return
+
+    elif data == 'reject_tos':
+        # معالجة حالة رفض السياسة
+        try: await query.answer("تم تسجيل الرفض")
+        except: pass
+        
+        await query.edit_message_text(
+            "⚠️ <b>تنبيه!</b>\n\nعذراً، لا يمكنك استخدام خدمات <b>سمو الأرقام</b> دون الموافقة على سياسة الخصوصية.\n\n"
+            "إذا غيرت رأيك، أرسل /start مجدداً للموافقة.",
+            parse_mode='HTML'
+        )
+        return     
     # القائمة الرئيسية والعودة
     if data == 'home':
         await clean_and_show_menu(query, context, uid)
