@@ -81,7 +81,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     # ب: التعامل مع ربط القنوات (Request Chat)
-        if update.message.chat_shared:
+    if update.message.chat_shared:
         # 1. 🚀 الفحص: هل المستخدم لديه قناة مضافة مسبقاً؟
         existing_channels = database.get_user_entities(uid)
         
