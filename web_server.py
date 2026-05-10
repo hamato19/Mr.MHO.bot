@@ -21,37 +21,48 @@ async def health(request):
     return web.json_response({"status": "ok"})
 
 async def tradingview_webhook(request):
-    """استقبال الإشارات مع نظام التحقق من الاشتراك الآلي"""
+    """استقبال الإشارات مع نظام التحقق المطور"""
     token = request.match_info.get('token')
     chat_id = request.match_info.get('chat_id')
     
     try:
-        # 1. التحقق من التوكن (الآمان)
-        # دالة get_user_by_token ترجع قاموس يحتوي على user_id و is_activated و expiry_date
+        # 1. جلب بيانات المستخدم
         user = database.get_user_by_token(token)
         
         if not user:
             logger.warning(f"❌ محاولة وصول غير مصرح بها بتوكن: {token}")
             return web.json_response({"status": "error", "message": "Invalid Token"}, status=401)
 
-        # 2. التحقق المباشر من البيانات القادمة من القاعدة (آلياً)
-        # نستخدم أسماء الأعمدة الصحيحة كما في Neon
-        is_active = user.get('is_activated') # تأكد من وجود d في الآخر
+        # 2. التحقق المطور (الفحص المرن)
+        is_active_raw = user.get('is_activated')
         expiry = user.get('expiry_date')
         uid = user.get('user_id')
 
-        # فحص الحالة آلياً
-        from datetime import datetime
-        # إذا كان الحساب غير مفعل أو التاريخ انتهى
+        # طباعة DEBUG لمساعدتنا في اكتشاف التضارب
+        logger.info(f"DEBUG: User {uid} | is_active_raw: {is_active_raw} ({type(is_active_raw)}) | Expiry: {expiry}")
+
+        # تحويل أي قيمة (نص، رقم، منطق) إلى Boolean حقيقي
+        is_active = str(is_active_raw).lower() in ['true', '1', 't', 'yes']
+
+        # التحقق من الصلاحية
         if not is_active or (expiry and expiry < datetime.now()):
-            logger.info(f"🚫 إشارة محجوبة للمستخدم {uid}: اشتراك غير مفعل أو منتهي")
+            logger.info(f"🚫 إشارة محجوبة للمستخدم {uid}: التفعيل={is_active}, التاريخ={expiry}")
             return web.json_response({"status": "error", "message": "Subscription inactive or expired"}, status=403)
 
-        # 3. معالجة بيانات الإشارة
+        # 3. معالجة الإرسال
         body = await request.text()
         if not body:
             return web.json_response({"status": "error", "message": "Empty body"}, status=400)
 
+        bot = telegram.Bot(token=config.BOT_TOKEN)
+        await bot.send_message(chat_id=chat_id, text=body, parse_mode='HTML')
+        
+        logger.info(f"✅ تم إرسال الإشارة بنجاح للمشترك {uid}")
+        return web.json_response({"status": "success"})
+
+    except Exception as e:
+        logger.error(f"❌ Webhook Error: {e}")
+        return web.json_response({"status": "error", "message": str(e)}, status=500)
         # إرسال الرسالة عبر البوت
         bot = telegram.Bot(token=config.BOT_TOKEN)
         await bot.send_message(
