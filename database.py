@@ -306,13 +306,22 @@ def update_subscription(user_id, months=1):
         return False
 
 def get_user_by_token(token):
-    """جلب بيانات المستخدم باستخدام الرمز السري"""
+    """جلب بيانات المستخدم الكاملة للتحقق من الاشتراك"""
     try:
         with get_db() as conn:
-            # استخدام DictCursor يعيد البيانات كقاموس (Dictionary) لتسهيل التعامل معها
-            with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
-                cur.execute("SELECT user_id, secret_token FROM users WHERE secret_token = %s", (token,))
-                return cur.fetchone()
+            # استخدام RealDictCursor لضمان التعامل مع النتائج كقاموس بايثون
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # أضفنا is_activated و expiry_date للأمر
+                cur.execute("""
+                    SELECT user_id, secret_token, is_activated, expiry_date 
+                    FROM users 
+                    WHERE secret_token = %s
+                """, (token,))
+                
+                result = cur.fetchone()
+                
+                # تحويل النتيجة لقاموس بسيط لضمان التوافق مع الكود في الويب هوك
+                return dict(result) if result else None
     except Exception as e:
-        logging.error(f"Error fetching user by token: {e}")
+        logging.error(f"❌ Error in get_user_by_token: {e}")
         return None
