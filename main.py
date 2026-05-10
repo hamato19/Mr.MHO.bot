@@ -209,6 +209,31 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ents = database.get_user_entities(uid)
             await query.edit_message_text("📋 <b>قنواتك المرتبطة حالياً:</b>", parse_mode='HTML', reply_markup=keyboards.get_entities_keyboard(ents))
 
+               elif data == 'chs': # إدارة القنوات
+            ents = database.get_user_entities(uid)
+            await query.edit_message_text("📋 <b>قنواتك المرتبطة حالياً:</b>", parse_mode='HTML', reply_markup=keyboards.get_entities_keyboard(ents))
+            return # تأكد من وجود return هنا لإنهاء المعالج
+
+        elif data.startswith('del_ent_'):
+            try:
+                ent_id = data.replace('del_ent_', '')
+                database.delete_user_entity(uid, ent_id) 
+                await query.answer("✅ تم حذف القناة بنجاح", show_alert=False)
+                
+                # تحديث القائمة فوراً
+                ents = database.get_user_entities(uid)
+                await query.edit_message_text(
+                    "📋 <b>قنواتك المرتبطة حالياً:</b>", 
+                    parse_mode='HTML', 
+                    reply_markup=keyboards.get_entities_keyboard(ents)
+                )
+            except Exception as e:
+                logging.error(f"Error deleting entity: {e}")
+                await query.answer("⚠️ فشل الحذف")
+            return
+
+
+        
         elif data == 'add_channel':
             if is_owner or (user and user.get('is_activated')):
                 # 1. حذف الرسالة القديمة لتنظيف الشاشة
