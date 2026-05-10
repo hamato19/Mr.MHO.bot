@@ -122,8 +122,7 @@ def get_user_control_keyboard(target_id, is_active):
         [InlineKeyboardButton("🔙 عودة للقائمة", callback_data='adm_u')]
     ])
 
-
-# 8. إدارة القنوات (عرض وحذف) - نسخة محسنة لمنع الأخطاء
+# 8. إدارة القنوات (عرض وحذف) - نسخة متوافقة مع المحرك الأساسي
 def get_entities_keyboard(entities):
     kb = []
     if not entities:
@@ -131,22 +130,22 @@ def get_entities_keyboard(entities):
     else:
         for ent in entities:
             try:
-                # 1. استخراج الـ ID والتأكد من أنه نص نظيف وقصير
+                # استخراج الـ ID (نتوقع أنه في العمود الثاني ent[1] بناءً على قاعدة بيانات Neon)
                 if isinstance(ent, dict):
                     raw_id = str(ent.get('entity_id', '0'))
                 else:
-                    raw_id = str(ent[0])
+                    # بناءً على صور قاعدة البيانات، الـ ID هو العنصر الثاني
+                    raw_id = str(ent[1]) 
                 
-                # تنظيف الـ ID من أي مسافات أو رموز غريبة قد تزيد الحجم
                 clean_id = raw_id.strip()
 
-                # 2. نص الزر (يظهر للمستخدم) - نعرض الـ ID كاملاً هنا لأنه لا يسبب خطأ
+                # نص الزر الذي يظهر للمستخدم
                 button_text = f"🆔 {clean_id}"
                 
-                # 3. البيانات الخلفية (المشكلة هنا) - سنقتصر على أول 20 حرف فقط كإجراء احترازي
-                # تذكر: الحرف 'd_' يأخذ 2 بايت، والـ ID يأخذ الباقي
-                safe_callback_v = f"v_{clean_id}"[:60] 
-                safe_callback_d = f"d_{clean_id}"[:60]
+                # البيانات الخلفية: يجب أن تبدأ بـ del_ent_ لكي يتعرف عليها ملف main.py
+                # الحد الأقصى المسموح به في التليجرام هو 64 بايت
+                safe_callback_v = f"view_{clean_id}"[:64] 
+                safe_callback_d = f"del_ent_{clean_id}"[:64] # تعديل هام للتوافق
 
                 kb.append([
                     InlineKeyboardButton(button_text, callback_data=safe_callback_v),
@@ -159,6 +158,7 @@ def get_entities_keyboard(entities):
     kb.append([InlineKeyboardButton("➕ إضافة قناة جديدة", callback_data='add_channel')])
     kb.append([InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data='home')])
     return InlineKeyboardMarkup(kb)
+
 
 
 
