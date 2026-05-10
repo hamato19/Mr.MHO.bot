@@ -294,7 +294,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return 
 
-        elif data.startswith('gen_'):
+   elif data.startswith('gen_'):
         try:
             days = int(data.split('_')[1])
             import secrets # تأكد من استيرادها في أعلى الملف
