@@ -287,7 +287,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         elif data == 'adm_gen_menu': # قائمة توليد الأكواد
             await query.edit_message_text("🔑 <b>توليد أكواد اشتراك:</b>\nاختر مدة الكود المراد إنشاؤه:", parse_mode='HTML', reply_markup=keyboards.get_generation_menu())
-            
+        return
         elif data.startswith('gen_'): # تنفيذ عملية التوليد
             days = int(data.split('_')[1])
             code = f"SMO-{secrets.token_hex(4).upper()}"
