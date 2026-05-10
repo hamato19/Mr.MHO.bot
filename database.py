@@ -249,3 +249,17 @@ def add_new_user(user_id):
     except Exception as e:
         logging.error(f"❌ Database Error in add_new_user: {e}")
         return False
+def get_user_entities(user_id):
+    """جلب جميع القنوات المرتبطة بمستخدم محدد"""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                # نجلب المعرف (ID) والاسم (Name) من جدول entities
+                cur.execute(
+                    "SELECT user_id, entity_id, entity_name FROM entities WHERE user_id = %s", 
+                    (str(user_id),)
+                )
+                return cur.fetchall() # يعيد قائمة بالصفوف
+    except Exception as e:
+        logging.error(f"Error fetching user entities: {e}")
+        return []
