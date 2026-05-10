@@ -206,7 +206,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(f"🔐 <b>تم تحديث الرمز بنجاح!</b>\n\nروابطك الجديدة:\n<code>{webhook_text}</code>", parse_mode='HTML', reply_markup=keyboards.get_back_home())
 
         
-       elif data == 'chs': # إدارة القنوات
+        elif data == 'chs': # إدارة القنوات
             ents = database.get_user_entities(uid)
             await query.edit_message_text("📋 <b>قنواتك المرتبطة حالياً:</b>", parse_mode='HTML', reply_markup=keyboards.get_entities_keyboard(ents))
             return # تأكد أن المسافة هنا 12 مسطرة (أو 3 Tab)
