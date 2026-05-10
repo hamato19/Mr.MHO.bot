@@ -128,16 +128,22 @@ def add_user_entity(user_id, entity_id, entity_name):
         logging.error(f"Error adding entity: {e}")
         return False
 
-def get_user_entities(user_id):
-    """جلب القنوات المرتبطة"""
+
+def delete_user_entity(user_id, entity_id): # تم تغيير الاسم ليطابق main.py
+    """حذف قناة مرتبطة نهائياً من قاعدة البيانات"""
     try:
         with get_db() as conn:
-            with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                cur.execute("SELECT entity_id, entity_name FROM entities WHERE user_id = %s", (str(user_id),))
-                return cur.fetchall()
+            with conn.cursor() as cur:
+                # التأكد من حذف السجل الخاص بالمستخدم والقناة المحددة
+                cur.execute(
+                    "DELETE FROM entities WHERE user_id = %s AND entity_id = %s", 
+                    (str(user_id), str(entity_id))
+                )
+                conn.commit()
+                return True
     except Exception as e:
-        logging.error(f"Error fetching entities: {e}")
-        return []
+        logging.error(f"Error in delete_user_entity: {e}")
+        return False
 
 def delete_entity(user_id, entity_id):
     """حذف قناة مرتبطة"""
