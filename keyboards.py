@@ -67,7 +67,7 @@ def get_subscription_options():
     kb = [
         [InlineKeyboardButton("💳 اشترك الآن", url="https://sumoualarqam.com/")],
         # قمنا بإزالة الـ Web App والآن يوجه المستخدم للكتابة فقط
-        [InlineKeyboardButton("🎫 طريقة التفعيل", callback_data='how_to_act')],
+        [InlineKeyboardButton("🎫 ارسل كود التفعيل", callback_data='how_to_act')],
         [InlineKeyboardButton("⬅️ رجوع", callback_data='home')]
     ]
     return InlineKeyboardMarkup(kb)
