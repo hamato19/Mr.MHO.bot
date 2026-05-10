@@ -173,7 +173,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             raw_date = user.get('expiry_date')
             
             if is_owner:
-                time_left = "وصول كامل (المطور)"
+                time_left = "وصول كامل (الادمن)"
             elif raw_date:
                 # إذا كان التاريخ 2099 كما في الصورة فهو اشتراك دائم
                 if "2099" in str(raw_date):
@@ -231,7 +231,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             t, a, c = database.get_admin_dashboard_stats()
             await query.edit_message_text(f"👮 <b>لوحة التحكم:</b>\n\n👤 إجمالي المستخدمين: {t}\n✅ المشتركين النشطين: {a}\n🎫 الأكواد غير المستخدمة: {c}", parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
         
-        elif data == 'adm_users': # إدارة المستخدمين (إصلاح الزر)
+        elif data == 'adm_us': # إدارة المستخدمين (إصلاح الزر)
             users_list = database.get_all_users_brief() # تأكد من وجود هذه الدالة في database.py
             await query.edit_message_text(f"👥 <b>قائمة المستخدمين:</b>\n{users_list}", parse_mode='HTML', reply_markup=keyboards.get_back_home())
 
