@@ -287,14 +287,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
             # --- كود إدارة الأكواد وتوليدها (داخل دالة handle_callback) ---
         elif data == 'adm_gen_menu':
-        await query.edit_message_text(
+             await query.edit_message_text(
             "🔑 <b>توليد أكواد اشتراك:</b>\nاختر مدة الكود المراد إنشاؤه:", 
             parse_mode='HTML', 
             reply_markup=keyboards.get_generation_menu()
         )
         return 
 
-       elif data.startswith('gen_'):
+        elif data.startswith('gen_'):
         try:
             days = int(data.split('_')[1])
             import secrets # تأكد من استيرادها في أعلى الملف
