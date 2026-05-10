@@ -224,88 +224,53 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await query.answer("⚠️ عذراً، هذه الميزة للمشتركين فقط.", show_alert=True)
-            return
-    # --- لوحة الأدمن (التحكم الكامل) ---
+            re    # --- لوحة الأدمن (التحكم الكامل) ---
     if is_owner:
         if data == 'adm': # الإحصائيات
             t, a, c = database.get_admin_dashboard_stats()
             await query.edit_message_text(f"👮 <b>لوحة التحكم:</b>\n\n👤 إجمالي المستخدمين: {t}\n✅ المشتركين النشطين: {a}\n🎫 الأكواد غير المستخدمة: {c}", parse_mode='HTML', reply_markup=keyboards.get_admin_keyboard())
-        
-    elif data == 'adm_u':
-        try:
-            users = database.get_all_users()
-            if not users:
-                await query.answer("ℹ️ لا يوجد مستخدمون حالياً", show_alert=True)
-                return
+            return
 
-            await query.edit_message_text(
-                "👥 <b>قائمة إدارة المستخدمين:</b>\n\nاختر مستخدماً لعرض تفاصيله:",
-                parse_mode='HTML',
-                reply_markup=keyboards.get_users_management_keyboard(users)
-            )
-            await query.answer()
-        except Exception as e:
-            logging.error(f"Error in adm_u: {e}")
-            await query.answer("⚠️ فشل جلب القائمة", show_alert=True)
-        return
+        elif data == 'adm_u': # قائمة المستخدمين
+            try:
+                users = database.get_all_users()
+                if not users:
+                    await query.answer("ℹ️ لا يوجد مستخدمون حالياً", show_alert=True)
+                    return
+                await query.edit_message_text("👥 <b>إدارة المستخدمين:</b>\nاختر مستخدماً:", parse_mode='HTML', reply_markup=keyboards.get_users_management_keyboard(users))
+            except Exception as e:
+                logging.error(f"Error in adm_u: {e}")
+            return
 
-    # 2. عرض تفاصيل المستخدم
-    elif data.startswith('user_info_'):
-        try: # تأكد أن الـ t صغيرة ومزاحة 8 مسافات للداخل
-            target_uid = data.replace('user_info_', '')
-            user = database.get_user_profile(target_uid)
-            user_channels = database.get_user_entities(target_uid)
-            
-            if user:
-                # تجهيز قائمة القنوات بشكل أنيق
-                channels_text = "\n".join([f"🔹 <code>{ch['entity_id']}</code> ({ch.get('entity_name', 'قناة')})" for ch in user_channels]) if user_channels else "❌ لا توجد قنوات مرتبطة"
+        elif data.startswith('user_info_'): # تفاصيل مستخدم محدد
+            try:
+                target_uid = data.replace('user_info_', '')
+                u_profile = database.get_user_profile(target_uid)
+                u_channels = database.get_user_entities(target_uid)
+                if u_profile:
+                    ch_text = "\n".join([f"🔹 <code>{ch['entity_id']}</code>" for ch in u_channels]) if u_channels else "❌ لا توجد قنوات"
+                    text = (f"👤 <b>تفاصيل المستخدم:</b> <code>{target_uid}</code>\n"
+                            f"📊 الحالة: {'✅ نشط' if u_profile.get('is_activated') else '❌ غير نشط'}\n"
+                            f"📅 الانتهاء: <code>{u_profile.get('expiry_date', 'غير محدد')}</code>\n\n"
+                            f"📢 القنوات:\n{ch_text}")
+                    await query.edit_message_text(text, parse_mode='HTML', reply_markup=keyboards.get_user_control_keyboard(target_uid, u_profile.get('is_activated')))
+            except Exception as e:
+                logging.error(f"Error in user_info: {e}")
+            return
 
-                # تنسيق التواريخ (مع التحقق من وجودها لتجنب الأخطاء)
-                start_date = user['created_at'].strftime('%Y-%m-%d') if user.get('created_at') else "غير مسجل"
-                expiry_date = user['expiry_date'].strftime('%Y-%m-%d') if user.get('expiry_date') else "غير مفعل"
-                status = "✅ نشط" if user.get('is_activated') else "❌ منتهي/غير نشط"
+        elif data == 'adm_gen_menu': # قائمة التوليد
+            await query.edit_message_text("🔑 <b>توليد الأكواد:</b>\nاختر المدة:", parse_mode='HTML', reply_markup=keyboards.get_generation_menu())
+            return
 
-                text = (
-                    f"👤 <b>تفاصيل المستخدم:</b>\n"
-                    f"━━━━━━━━━━━━━━━\n"
-                    f"🆔 <b>ID:</b> <code>{target_uid}</code>\n"
-                    f"📊 <b>الحالة:</b> {status}\n\n"
-                    f"📅 <b>تاريخ التسجيل:</b> {start_date}\n"
-                    f"⏳ <b>تاريخ الانتهاء:</b> {expiry_date}\n\n"
-                    f"📢 <b>القنوات المرتبطة:</b>\n{channels_text}\n"
-                    f"━━━━━━━━━━━━━━━"
-                )
-
-                await query.edit_message_text(
-                    text,
-                    parse_mode='HTML',
-                    reply_markup=keyboards.get_user_control_keyboard(target_uid, user.get('is_activated'))
-                )
-            else:
-                await query.answer("❌ تعذر العثور على بيانات المستخدم", show_alert=True)
-                
-            await query.answer()
-            
-        except Exception as e:
-            logging.error(f"Error in user_info: {e}")
-            await query.answer("⚠️ حدث خطأ أثناء عرض التفاصيل", show_alert=True)
-        return
-
-   elif data.startswith('gen_'):
-        try:
-            days = int(data.split('_')[1])
-            import secrets # تأكد من استيرادها في أعلى الملف
-            code = f"SMO-{secrets.token_hex(4).upper()}"
-            database.add_subscription_code(code, days)
-            await query.edit_message_text(
-                f"✅ <b>تم إنشاء كود بنجاح</b>\n\nالمدة: {days} يوم\nالكود: <code>{code}</code>\n\nأرسل الكود للمشترك لتفعيله.",
-                parse_mode='HTML',
-                reply_markup=keyboards.get_back_home()
-            )
-        except Exception as e:
-            logging.error(f"Error generating code: {e}")
-            await query.answer("⚠️ فشل إنشاء الكود", show_alert=True)
-        return
+        elif data.startswith('gen_'): # تنفيذ التوليد
+            try:
+                days = int(data.split('_')[1])
+                new_code = f"SMO-{secrets.token_hex(4).upper()}"
+                database.add_subscription_code(new_code, days)
+                await query.edit_message_text(f"✅ <b>تم التوليد!</b>\nالكود: <code>{new_code}</code>\nالمدة: {days} يوم", parse_mode='HTML', reply_markup=keyboards.get_back_home())
+            except Exception as e:
+                logging.error(f"Error generating code: {e}")
+            return
 
 # --- 4. نقطة الانطلاق (خارج الدالة السابقة) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
