@@ -21,7 +21,6 @@ async def health(request):
     return web.json_response({"status": "ok"})
 
 async def tradingview_webhook(request):
-async def tradingview_webhook(request):
     """استقبال الإشارات مع نظام التحقق من الاشتراك الآلي"""
     token = request.match_info.get('token')
     chat_id = request.match_info.get('chat_id')
