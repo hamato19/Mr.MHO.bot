@@ -285,20 +285,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("⚠️ خطأ في عرض التفاصيل", show_alert=True)
            return
         
-        elif data == 'adm_gen_menu': # هذا السطر الآن سيصبح صحيحاً
-            await query.edit_message_text(
+        elif data == 'adm_gen_menu':
+        # لاحظ الفراغ هنا (4 مسافات أو Tab)
+        await query.edit_message_text(
             "🔑 <b>توليد أكواد اشتراك:</b>\nاختر مدة الكود المراد إنشاؤه:", 
             parse_mode='HTML', 
             reply_markup=keyboards.get_generation_menu()
         )
         return
-        
-        elif data.startswith('gen_'): # تنفيذ عملية التوليد
-            days = int(data.split('_')[1])
-            code = f"SMO-{secrets.token_hex(4).upper()}"
-            database.add_subscription_code(code, days)
-            await query.edit_message_text(f"✅ <b>تم إنشاء كود بنجاح:</b>\n\nالمدة: {days} يوم\nالكود: <code>{code}</code>\n\nأرسل الكود للمشترك لتفعيله.", parse_mode='HTML', reply_markup=keyboards.get_back_home())
-    return
+
+    elif data.startswith('gen_'):
+        # لاحظ الفراغ هنا أيضاً
+        days = int(data.split('_')[1])
+        code = f"SMO-{secrets.token_hex(4).upper()}"
+        database.add_subscription_code(code, days)
+        await query.edit_message_text(f"✅ تم إنشاء كود بنجاح...")
+        return
 # --- 4. نقطة الانطلاق ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
