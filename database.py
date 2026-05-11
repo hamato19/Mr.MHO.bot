@@ -268,37 +268,38 @@ def get_all_user_ids():
 
 
 def delete_user(user_id):
-    """حذف المستخدم من جميع الجداول المحتملة لضمان النتيجة"""
+    """حذف شامل للمعرف من جميع الجداول لضمان التطهير التام"""
     conn = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
         
-        # تحويل المعرف لنص صريح ونظيف
+        # تحويل المعرف لنص صريح
         target_id = str(user_id).strip()
         
-        # 1. محاولة الحذف من جدول users
-        cursor.execute("DELETE FROM users WHERE user_id = %s", (target_id,))
-        rows_users = cursor.rowcount
+        # قائمة الجداول اللي نبي نحذف منها
+        # أضفت لك كل الجداول اللي ظهرت في صورك وكودك
+        tables = ["users", "activation_codes"]
         
-        # 2. محاولة الحذف من جدول activation_codes (احتياطاً)
-        cursor.execute("DELETE FROM activation_codes WHERE user_id = %s", (target_id,))
-        rows_codes = cursor.rowcount
+        total_deleted = 0
         
-        conn.commit() # تثبيت الحذف في الجدولين
+        for table in tables:
+            # استخدام TRIM و CAST لضمان أن Neon يطابق النص 100%
+            query = f"DELETE FROM {table} WHERE TRIM(CAST(user_id AS TEXT)) = %s"
+            cursor.execute(query, (target_id,))
+            total_deleted += cursor.rowcount
         
+        conn.commit()
         cursor.close()
         conn.close()
         
-        # إذا تم الحذف من أي جدول، نعتبرها نجحت
-        total_deleted = rows_users + rows_codes
-        print(f"📡 DEBUG: الحذف النهائي لـ {target_id} | الإجمالي: {total_deleted}")
+        print(f"📡 تصفية شاملة لـ {target_id} | تم حذف {total_deleted} صفوف إجمالاً.")
         
+        # نعتبرها نجحت إذا حذفنا صف واحد على الأقل من أي جدول
         return total_deleted > 0
     except Exception as e:
-        if conn:
-            conn.rollback()
-        print(f"❌ خطأ قاعدة البيانات: {e}")
+        if conn: conn.rollback()
+        print(f"❌ خطأ في التطهير الشامل: {e}")
         return False
 
 
