@@ -274,6 +274,7 @@ def delete_user(user_id):
         cursor = conn.cursor()
         
         # التأكد من تحويل المعرف لرقم لتجنب تعارض الأنواع
+        # تليجرام يرسل المعرف كنص، وقاعدة البيانات تطلبه كرقم
         clean_id = int(str(user_id).strip())
         
         cursor.execute("DELETE FROM users WHERE user_id = %s", (clean_id,))
@@ -281,18 +282,20 @@ def delete_user(user_id):
         # معرفة كم صف تأثر بالعملية
         affected_rows = cursor.rowcount
         
-        conn.commit()
+        conn.commit()  # حفظ التغييرات نهائياً
         cursor.close()
         conn.close()
         
         # إذا كان عدد الصفوف المتأثرة أكبر من 0، يعني الحذف نجح
         return affected_rows > 0
-        
+
     except Exception as e:
+        # تسجيل الخطأ في حال حدوثه لكي لا ينهار البوت
+        print(f"❌ Error in database delete_user: {e}")
         if conn:
-            conn.rollback() # تراجع عن العملية في حال الخطأ
-        print(f"❌ Error deleting user {user_id}: {e}")
+            conn.rollback()
         return False
+
 
         
 def admin_activate_user(user_id, days=30):
