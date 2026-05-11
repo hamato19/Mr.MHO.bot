@@ -333,7 +333,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
             # --- كود معالجة أزرار التفعيل والحذف للمسؤول ---
-    elif data.startswith('act_'):
+      elif data.startswith('act_'):
         u_id = data.replace('act_', '')
         # تفعيل مباشر لـ 30 يوم من خلال الدالة الجديدة في database.py
         success, date_str = database.admin_activate_user(u_id, days=30)
@@ -341,11 +341,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer(f"✅ تم التفعيل حتى {date_str}", show_alert=True)
             # استدعاء دالة عرض التفاصيل لتحديث الرسالة تلقائياً
             return await show_user_details(query, u_id)
-        else:
+      else:
             await query.answer("❌ فشل التفعيل المباشر")
             return
 
-    elif data.startswith('del_u_'):
+      elif data.startswith('del_u_'):
         u_id = data.replace('del_u_', '')
         # حذف المستخدم وقنواته (Entities) لمنع تعارض القيود
         if database.delete_user(u_id):
