@@ -377,11 +377,27 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
         elif data.startswith('del_u_'):
             u_id = data.replace('del_u_', '')
-            if database.delete_user(u_id):
-                await query.answer("🗑️ تم حذف المستخدم بنجاح", show_alert=True)
-                await clean_and_show_menu(query, context, uid)
-            else:
-                await query.answer("❌ فشل الحذف")
+                elif data.startswith('del_u_'):
+            u_id = data.replace('del_u_', '')
+            try:
+                # تحويل المعرف لرقم ضروري جداً لقواعد بيانات Render
+                target_id = int(u_id)
+                
+                if database.delete_user(target_id):
+                    await query.answer("🗑️ تم حذف المستخدم بنجاح", show_alert=True)
+                    # بدلاً من تنظيف المنيو فوراً، نؤكد الحذف برسالة نصية
+                    await query.edit_message_text(
+                        f"✅ تم حذف المستخدم <code>{target_id}</code> نهائياً من القاعدة.",
+                        parse_mode='HTML',
+                        reply_markup=keyboards.get_back_home()
+                    )
+                else:
+                    await query.answer("❌ فشل الحذف: المستخدم غير موجود في القاعدة", show_alert=True)
+            except ValueError:
+                await query.answer("⚠️ خطأ في تنسيق معرف المستخدم")
+            except Exception as e:
+                logging.error(f"Error deleting user: {e}")
+                await query.answer("⚠️ حدث خطأ تقني")
             return
 
 
