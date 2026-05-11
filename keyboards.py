@@ -115,12 +115,27 @@ def get_users_management_keyboard(users):
 
 # 7. التحكم بالمستخدم (من قبل الأدمن)
 def get_user_control_keyboard(target_id, is_active):
-    # زر التفعيل سيوجه الأدمن أو يفتح حالة التفعيل للمستخدم
-    # سنستخدم اختصارات: 'act_' للتفعيل و 'del_u_' للحذف
+    # هذه القائمة الرئيسية اللي تظهر أول ما تفتح بيانات المستخدم
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("✅ تفعيل (إدخال كود)", callback_data=f"act_{target_id}")],
+        [InlineKeyboardButton("✅ تفعيل (اختر المدة)", callback_data=f"ask_act_{target_id}")],
         [InlineKeyboardButton("🗑️ حذف المستخدم", callback_data=f"del_u_{target_id}")],
         [InlineKeyboardButton("🔙 عودة للقائمة", callback_data='adm_u')]
+    ])
+
+def get_activation_periods_keyboard(target_id):
+    # هذه القائمة اللي تظهر لما تضغط على "تفعيل"
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("10 أيام", callback_data=f"act_10_{target_id}"),
+            InlineKeyboardButton("30 يوم", callback_data=f"act_30_{target_id}")
+        ],
+        [
+            InlineKeyboardButton("60 يوم", callback_data=f"act_60_{target_id}"),
+            InlineKeyboardButton("90 يوم", callback_data=f"act_90_{target_id}")
+        ],
+        [InlineKeyboardButton("🔙 إلغاء", callback_data=f"view_u_{target_id}")]
+    ])
+
     ])
 
 # 8. إدارة القنوات (عرض وحذف) - نسخة متوافقة مع المحرك الأساسي
