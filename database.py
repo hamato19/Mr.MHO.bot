@@ -268,39 +268,38 @@ def get_all_user_ids():
 
 
 def delete_user(user_id):
-    """حذف شامل للمعرف من جميع الجداول لضمان التطهير التام"""
+    """حذف المستخدم بمحاكاة دقيقة لأمر الـ SQL الناجح"""
     conn = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
         
-        # تحويل المعرف لنص صريح
+        # تحويل المعرف لنص وتطهيره من أي مسافات
         target_id = str(user_id).strip()
         
-        # قائمة الجداول اللي نبي نحذف منها
-        # أضفت لك كل الجداول اللي ظهرت في صورك وكودك
-        tables = ["users", "activation_codes"]
+        # نستخدم الاستعلام اللي نجح معك يدوياً
+        # TRIM يضمن إزالة أي فراغات مخفية في القاعدة
+        query = "DELETE FROM users WHERE TRIM(user_id) = %s"
         
-        total_deleted = 0
+        cursor.execute(query, (target_id,))
+        affected = cursor.rowcount
         
-        for table in tables:
-            # استخدام TRIM و CAST لضمان أن Neon يطابق النص 100%
-            query = f"DELETE FROM {table} WHERE TRIM(CAST(user_id AS TEXT)) = %s"
-            cursor.execute(query, (target_id,))
-            total_deleted += cursor.rowcount
-        
+        # تثبيت العملية فوراً
         conn.commit()
+        
+        print(f"📡 SQL Execution: DELETE for ID {target_id} | Rows affected: {affected}")
+        
         cursor.close()
         conn.close()
         
-        print(f"📡 تصفية شاملة لـ {target_id} | تم حذف {total_deleted} صفوف إجمالاً.")
-        
-        # نعتبرها نجحت إذا حذفنا صف واحد على الأقل من أي جدول
-        return total_deleted > 0
+        return affected > 0
     except Exception as e:
-        if conn: conn.rollback()
-        print(f"❌ خطأ في التطهير الشامل: {e}")
+        if conn:
+            conn.rollback()
+            conn.close()
+        print(f"❌ Database Error: {e}")
         return False
+
 
 
 
