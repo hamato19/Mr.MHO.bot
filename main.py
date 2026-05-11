@@ -374,22 +374,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=keyboards.get_activation_periods_keyboard(target_id)
             )
             return
-            
-          # 3. حذف المستخدم نهائياً
-       elif data.startswith('del_u_'):
+            # تأكد أن الـ elif هذه تحت الـ elif اللي قبلها بالضبط
+        elif data.startswith('del_u_'):
             u_id = data.replace('del_u_', '')
             try:
-                # نرسل المعرف كـ نص (String) لأن عمود Neon نوعه Text
-                # شلنا الـ int(u_id) لضمان المطابقة
+                # نرسلها كنص (String) كما اتفقنا لضمان مطابقة Neon
                 if database.delete_user(u_id):
                     await query.answer("🗑️ تم حذف المستخدم بنجاح", show_alert=True)
                     await clean_and_show_menu(query, context, uid)
                 else:
-                    # لو طلع لك هذا، معناها المعرف نصياً مو موجود في الجدول
-                    await query.answer("❌ فشل الحذف: المعرف غير مطابقة في القاعدة", show_alert=True)
+                    await query.answer("❌ فشل الحذف: المعرف غير موجود", show_alert=True)
             except Exception as e:
-                logging.error(f"Error in delete process: {e}")
-                await query.answer("⚠️ حدث خطأ تقني أثناء الحذف")
+                logging.error(f"Error in delete: {e}")
+                await query.answer("⚠️ حدث خطأ تقني")
             return
 
     
