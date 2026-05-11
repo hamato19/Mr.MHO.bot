@@ -64,6 +64,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await clean_and_show_menu(update, context, uid)
             return
     
+         # تحقق إذا كان الأدمن في حالة "انتظار رسالة التعميم"
+    if context.user_data.get('waiting_for_broadcast') and str(update.effective_user.id) == config.ADMIN_ID:
+          broadcast_text = update.message.text
+    # جلب جميع المعرفات من قاعدة البيانات
+           all_users = database.get_all_user_ids() 
+     
+           sent = 0
+           failed = 0
+           progress_msg = await update.message.reply_text(f"⏳ جاري الإرسال إلى {len(all_users)} مستخدم...")
+    
+           for u_id in all_users:
+            try:
+            await context.bot.send_message(chat_id=u_id, text=broadcast_text)
+            sent += 1
+        except Exception:
+            failed += 1
+            continue
+            
+    await progress_msg.edit_text(f"✅ تم الانتهاء من الإرسال!\n\n🟢 نجح: {sent}\n🔴 فشل (حظر أو غيره): {failed}")
+    # إعادة تعيين الحالة لإيقاف الاستقبال الجماعي
+    context.user_data['waiting_for_broadcast'] = False
+    return
+
+
+
     # أ: التعامل مع أكواد التفعيل (SMO-)
     if update.message.text:
         text = update.message.text.strip().upper()
