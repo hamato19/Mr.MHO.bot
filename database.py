@@ -268,32 +268,36 @@ def get_all_user_ids():
 
 
 def delete_user(user_id):
+    """حذف المستخدم من جميع الجداول المحتملة لضمان النتيجة"""
     conn = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
         
-        # تنظيف المعرف تماماً من أي مسافات
+        # تحويل المعرف لنص صريح ونظيف
         target_id = str(user_id).strip()
         
-        # استخدام LIKE لضمان مطابقة النص في Neon 
-        # وضعنا CAST للتأكد أن النوع نصي 100%
-        query = "DELETE FROM users WHERE CAST(user_id AS TEXT) LIKE %s"
+        # 1. محاولة الحذف من جدول users
+        cursor.execute("DELETE FROM users WHERE user_id = %s", (target_id,))
+        rows_users = cursor.rowcount
         
-        # نرسل المعرف مع علامة % لزيادة دقة البحث
-        cursor.execute(query, (f"%{target_id}%",))
+        # 2. محاولة الحذف من جدول activation_codes (احتياطاً)
+        cursor.execute("DELETE FROM activation_codes WHERE user_id = %s", (target_id,))
+        rows_codes = cursor.rowcount
         
-        affected = cursor.rowcount
-        conn.commit()
-        
-        print(f"📡 محاولة حذف: {target_id} | النتيجة: {affected} صفوف")
+        conn.commit() # تثبيت الحذف في الجدولين
         
         cursor.close()
         conn.close()
         
-        return affected > 0
+        # إذا تم الحذف من أي جدول، نعتبرها نجحت
+        total_deleted = rows_users + rows_codes
+        print(f"📡 DEBUG: الحذف النهائي لـ {target_id} | الإجمالي: {total_deleted}")
+        
+        return total_deleted > 0
     except Exception as e:
-        if conn: conn.rollback()
+        if conn:
+            conn.rollback()
         print(f"❌ خطأ قاعدة البيانات: {e}")
         return False
 
