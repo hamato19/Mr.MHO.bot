@@ -253,3 +253,14 @@ def get_user_by_token(token):
     except Exception as e:
         logging.error(f"❌ Error in get_user_by_token: {e}")
         return None
+
+def get_all_user_ids():
+    """جلب قائمة بكل معرفات التلجرام للمستخدمين"""
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT user_id FROM users")
+                return [row[0] for row in cur.fetchall()]
+    except Exception as e:
+        logging.error(f"❌ خطأ في جلب معرفات المستخدمين: {e}")
+        return []
