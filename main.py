@@ -324,6 +324,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logging.error(f"Error generating code: {e}")
             return
 
+        if data == 'broadcast_prompt':
+           await query.message.reply_text("📝 يرجى إرسال الرسالة التي تريد تعميمها على جميع المشتركين الآن:")
+           context.user_data['waiting_for_broadcast'] = True
+           return
+
 # --- 4. نقطة الانطلاق (خارج الدالة السابقة) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
