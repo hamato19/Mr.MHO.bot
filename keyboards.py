@@ -132,7 +132,7 @@ def get_activation_periods_keyboard(target_id):
         [InlineKeyboardButton("🔙 إلغاء", callback_data=f"view_u_{target_id}")]
     ])
 
-    ])
+    
 
 # 8. إدارة القنوات (عرض وحذف) - نسخة متوافقة مع المحرك الأساسي
 def get_entities_keyboard(entities):
