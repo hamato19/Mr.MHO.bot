@@ -63,30 +63,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("🔄 جاري العودة للقائمة الرئيسية...", reply_markup=ReplyKeyboardRemove())
             await clean_and_show_menu(update, context, uid)
             return
-    
-         # تحقق إذا كان الأدمن في حالة "انتظار رسالة التعميم"
-    if context.user_data.get('waiting_for_broadcast') and str(update.effective_user.id) == config.ADMIN_ID:
-          broadcast_text = update.message.text
-    # جلب جميع المعرفات من قاعدة البيانات
-           all_users = database.get_all_user_ids() 
-     
-           sent = 0
-           failed = 0
-           progress_msg = await update.message.reply_text(f"⏳ جاري الإرسال إلى {len(all_users)} مستخدم...")
-    
-           for u_id in all_users:
-            try:
-            await context.bot.send_message(chat_id=u_id, text=broadcast_text)
-            sent += 1
-        except Exception:
-            failed += 1
-            continue
             
-    await progress_msg.edit_text(f"✅ تم الانتهاء من الإرسال!\n\n🟢 نجح: {sent}\n🔴 فشل (حظر أو غيره): {failed}")
-    # إعادة تعيين الحالة لإيقاف الاستقبال الجماعي
-    context.user_data['waiting_for_broadcast'] = False
-    return
-
+        if context.user_data.get('waiting_for_broadcast') and str(uid) == str(config.ADMIN_ID):
+            all_users = database.get_all_user_ids()  # تأكد أن هذا السطر محاذي تماماً لما تحته
+            sent, failed = 0, 0
+            
+            progress = await update.message.reply_text(f"⏳ جاري الإرسال إلى {len(all_users)} مستخدم...")
+            
+            for user_id in all_users:
+                try:
+                    await context.bot.copy_message(
+                        chat_id=user_id,
+                        from_chat_id=update.message.chat_id,
+                        message_id=update.message.message_id
+                    )
+                    sent += 1
+                except:
+                    failed += 1
+            
+            await progress.edit_text(f"✅ تم الانتهاء!\n\n🟢 نجح: {sent}\n🔴 فشل: {failed}")
+            context.user_data['waiting_for_broadcast'] = False
+            return 
 
 
     # أ: التعامل مع أكواد التفعيل (SMO-)
