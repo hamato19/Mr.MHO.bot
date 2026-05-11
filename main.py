@@ -333,10 +333,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
             # --- كود معالجة أزرار التفعيل والحذف للمسؤول ---
-        elif data.startswith('act_'):
-           u_id = data.replace('act_', '')
-           success, date_str = database.admin_activate_user(u_id, 30)
-           if success:
+         elif data.startswith('act_'):
+             u_id = data.replace('act_', '')
+             success, date_str = database.admin_activate_user(u_id, 30)
+             if success:
             await query.answer(f"✅ تم التفعيل: {date_str}", show_alert=True)
             await show_user_details(query, u_id)
         else:
