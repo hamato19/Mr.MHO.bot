@@ -278,3 +278,22 @@ def delete_user(user_id):
     except Exception as e:
         print(f"Error deleting user: {e}")
         return False
+        
+def admin_activate_user(user_id, days=30):
+    """تفعيل مستخدم يدوياً من قبل الأدمن لمدة محددة (متوافقة مع get_db)"""
+    try:
+        # حساب تاريخ الانتهاء بناءً على عدد الأيام
+        expiry_date = datetime.now() + timedelta(days=days)
+        
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE users SET is_activated = TRUE, expiry_date = %s WHERE user_id = %s",
+                    (expiry_date, str(user_id))
+                )
+                conn.commit()
+                logging.info(f"✅ تم تفعيل المستخدم {user_id} يدوياً حتى {expiry_date}")
+                return True, expiry_date.strftime('%Y-%m-%d')
+    except Exception as e:
+        logging.error(f"❌ خطأ في admin_activate_user: {e}")
+        return False, None
