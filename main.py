@@ -332,31 +332,39 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logging.error(f"Error in user_info: {e}")
             return
 
-              # --- كود معالجة أزرار التفعيل والحذف للمسؤول ---
-        
+               # تنفيذ التفعيل الفعلي (لما تختار 10 أو 30 أو 60 يوم)
         elif data.startswith('act_'):
-            # التنسيق المتوقع للبيانات: act_المدة_المعرف
-            # مثال: act_60_12345678
             parts = data.split('_')
-            
             try:
+                # التأكد من التنسيق: act_المدة_المعرف
                 if len(parts) == 3:
-                    days = int(parts[1])  # المدة (10, 30, 60, 90)
-                    target_id = parts[2]  # معرف المستخدم
+                    days = int(parts[1])
+                    target_id = parts[2]
+                    
+                    success, date_str = database.admin_activate_user(target_id, days)
+                    
+                    if success:
+                        # 1. إشعار منبثق سريع (Toast)
+                        await query.answer(f"✅ تم التفعيل بنجاح لمدة {days} يوم", show_alert=False)
+                        
+                        # 2. تحديث نص الرسالة لعرض بيانات النجاح كاملة
+                        await query.edit_message_text(
+                            f"🎉 <b>تم تفعيل المستخدم بنجاح!</b>\n\n"
+                            f"👤 معرف المستخدم: <code>{target_id}</code>\n"
+                            f"📅 مدة الاشتراك: <b>{days} يوم</b>\n"
+                            f"⏳ تاريخ الانتهاء الجديد: <code>{date_str}</code>\n\n"
+                            f"✨ تم تحديث صلاحيات الوصول للمستخدم الآن.",
+                            parse_mode='HTML',
+                            reply_markup=keyboards.get_back_home() # يظهر له زر العودة فقط
+                        )
+                    else:
+                        await query.answer("❌ فشل التفعيل في قاعدة البيانات", show_alert=True)
                 else:
-                    days = 30             # افتراضي
-                    target_id = parts[1]
-
-                success, date_str = database.admin_activate_user(target_id, days)
-                
-                if success:
-                    await query.answer(f"✅ تم التفعيل لمدة {days} يوم حتى: {date_str}", show_alert=True)
-                    await clean_and_show_menu(query, context, uid)
-                else:
-                    await query.answer("❌ فشل التفعيل - تأكد من قاعدة البيانات")
+                    await query.answer("⚠️ عذراً، حدث خطأ في تنسيق البيانات")
+                    
             except Exception as e:
-                logging.error(f"Error in activation callback: {e}")
-                await query.answer("⚠️ حدث خطأ أثناء المعالجة")
+                logging.error(f"Error in activation success message: {e}")
+                await query.answer("⚠️ حدث خطأ تقني أثناء محاولة تحديث الرسالة")
             return
 
  # 1. مرحلة طلب القائمة (إظهار أزرار 10، 30، 60، 90)
