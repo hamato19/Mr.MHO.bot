@@ -334,7 +334,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
               # --- كود معالجة أزرار التفعيل والحذف للمسؤول ---
         
-        elif data.startswith('ask_act_'):
+        elif data.startswith('act_'):
             # التنسيق المتوقع للبيانات: act_المدة_المعرف
             # مثال: act_60_12345678
             parts = data.split('_')
@@ -359,7 +359,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.answer("⚠️ حدث خطأ أثناء المعالجة")
             return
 
-
+ # 1. مرحلة طلب القائمة (إظهار أزرار 10، 30، 60، 90)
+        elif data.startswith('ask_act_'):
+            target_id = data.replace('ask_act_', '')
+            await query.edit_message_reply_markup(
+                reply_markup=keyboards.get_activation_periods_keyboard(target_id)
+            )
+            return
+            
         elif data.startswith('del_u_'):
             u_id = data.replace('del_u_', '')
             if database.delete_user(u_id):
