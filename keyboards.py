@@ -76,6 +76,7 @@ def get_admin_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("👥 إدارة المستخدمين", callback_data='adm_u')],
         [InlineKeyboardButton("🔑 توليد أكواد", callback_data='adm_gen_menu')],
+         [InlineKeyboardButton("📢 إرسال رسالة للجميع", callback_data='broadcast_prompt')], 
         back_home_button()
     ])
 
