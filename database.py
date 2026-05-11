@@ -280,10 +280,9 @@ def delete_user(user_id):
         return False
         
 def admin_activate_user(user_id, days=30):
-    """تفعيل مستخدم يدوياً من قبل الأدمن لمدة محددة (متوافقة مع get_db)"""
     try:
-        # حساب تاريخ الانتهاء بناءً على عدد الأيام
-        expiry_date = datetime.now() + timedelta(days=days)
+        # هنا يتم استخدام عدد الأيام المختار (10, 30, 60, أو 90)
+        expiry_date = datetime.now() + timedelta(days=int(days))
         
         with get_db() as conn:
             with conn.cursor() as cur:
@@ -292,8 +291,7 @@ def admin_activate_user(user_id, days=30):
                     (expiry_date, str(user_id))
                 )
                 conn.commit()
-                logging.info(f"✅ تم تفعيل المستخدم {user_id} يدوياً حتى {expiry_date}")
                 return True, expiry_date.strftime('%Y-%m-%d')
     except Exception as e:
-        logging.error(f"❌ خطأ في admin_activate_user: {e}")
+        logging.error(f"Error in admin_activate_user: {e}")
         return False, None
