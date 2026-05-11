@@ -334,14 +334,26 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
               # --- كود معالجة أزرار التفعيل والحذف للمسؤول ---
         elif data.startswith('act_'):
-            u_id = data.replace('act_', '')
-            success, date_str = database.admin_activate_user(u_id, 30)
+                elif data.startswith('act_'):
+            # تقسيم البيانات لجلب المدة ومعرف المستخدم
+            # التنسيق المتوقع: act_المدة_المعرف
+            parts = data.split('_')
+            if len(parts) >= 3:
+                days = int(parts[1])
+                t_id = parts[2]
+            else:
+                # قيمة افتراضية في حال لم تكن المدة موجودة
+                days = 30
+                t_id = parts[1]
+
+            success, date_str = database.admin_activate_user(t_id, days)
             if success:
-                await query.answer(f"✅ تم التفعيل حتى: {date_str}", show_alert=True)
+                await query.answer(f"✅ تم التفعيل لمدة {days} يوم حتى: {date_str}", show_alert=True)
                 await clean_and_show_menu(query, context, uid)
             else:
-                await query.answer("❌ فشل التفعيل المباشر")
+                await query.answer("❌ فشل التفعيل")
             return
+
 
         elif data.startswith('del_u_'):
             u_id = data.replace('del_u_', '')
