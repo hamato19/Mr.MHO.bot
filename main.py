@@ -333,25 +333,30 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
               # --- كود معالجة أزرار التفعيل والحذف للمسؤول ---
+        
         elif data.startswith('act_'):
-                elif data.startswith('act_'):
-            # تقسيم البيانات لجلب المدة ومعرف المستخدم
-            # التنسيق المتوقع: act_المدة_المعرف
+            # التنسيق المتوقع للبيانات: act_المدة_المعرف
+            # مثال: act_60_12345678
             parts = data.split('_')
-            if len(parts) >= 3:
-                days = int(parts[1])
-                t_id = parts[2]
-            else:
-                # قيمة افتراضية في حال لم تكن المدة موجودة
-                days = 30
-                t_id = parts[1]
+            
+            try:
+                if len(parts) == 3:
+                    days = int(parts[1])  # المدة (10, 30, 60, 90)
+                    target_id = parts[2]  # معرف المستخدم
+                else:
+                    days = 30             # افتراضي
+                    target_id = parts[1]
 
-            success, date_str = database.admin_activate_user(t_id, days)
-            if success:
-                await query.answer(f"✅ تم التفعيل لمدة {days} يوم حتى: {date_str}", show_alert=True)
-                await clean_and_show_menu(query, context, uid)
-            else:
-                await query.answer("❌ فشل التفعيل")
+                success, date_str = database.admin_activate_user(target_id, days)
+                
+                if success:
+                    await query.answer(f"✅ تم التفعيل لمدة {days} يوم حتى: {date_str}", show_alert=True)
+                    await clean_and_show_menu(query, context, uid)
+                else:
+                    await query.answer("❌ فشل التفعيل - تأكد من قاعدة البيانات")
+            except Exception as e:
+                logging.error(f"Error in activation callback: {e}")
+                await query.answer("⚠️ حدث خطأ أثناء المعالجة")
             return
 
 
