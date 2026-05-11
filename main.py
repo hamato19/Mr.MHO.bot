@@ -332,22 +332,21 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logging.error(f"Error in user_info: {e}")
             return
 
-            # --- كود معالجة أزرار التفعيل والحذف للمسؤول ---
+              # --- كود معالجة أزرار التفعيل والحذف للمسؤول ---
         elif data.startswith('act_'):
-                elif data.startswith('act_'):
             u_id = data.replace('act_', '')
             success, date_str = database.admin_activate_user(u_id, 30)
             if success:
-                await query.answer(f"✅ تم التفعيل: {date_str}", show_alert=True)
+                await query.answer(f"✅ تم التفعيل حتى: {date_str}", show_alert=True)
                 await clean_and_show_menu(query, context, uid)
             else:
-                await query.answer("❌ فشل التفعيل")
+                await query.answer("❌ فشل التفعيل المباشر")
             return
 
         elif data.startswith('del_u_'):
             u_id = data.replace('del_u_', '')
             if database.delete_user(u_id):
-                await query.answer("🗑️ تم حذف المستخدم", show_alert=True)
+                await query.answer("🗑️ تم حذف المستخدم بنجاح", show_alert=True)
                 await clean_and_show_menu(query, context, uid)
             else:
                 await query.answer("❌ فشل الحذف")
