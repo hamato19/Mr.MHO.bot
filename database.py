@@ -264,3 +264,17 @@ def get_all_user_ids():
     except Exception as e:
         logging.error(f"❌ خطأ في جلب معرفات المستخدمين: {e}")
         return []
+        
+def delete_user(user_id):
+    """حذف مستخدم نهائياً من قاعدة البيانات"""
+    try:
+        conn = get_connection() # أو اسم دالة الاتصال عندك
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Error deleting user: {e}")
+        return False
