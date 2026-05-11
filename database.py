@@ -265,7 +265,7 @@ def get_all_user_ids():
         logging.error(f"❌ خطأ في جلب معرفات المستخدمين: {e}")
         return []
         
-def delete_user(user_id):
+
 def delete_user(user_id):
     """حذف مستخدم نهائياً من قاعدة البيانات مع التأكد من التنفيذ"""
     conn = None
