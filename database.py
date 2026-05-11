@@ -268,34 +268,33 @@ def get_all_user_ids():
 
 
 def delete_user(user_id):
+    """حذف مستخدم نهائياً - متوافق مع عمود نصي (text) في Neon"""
     conn = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
         
-        # تحويل المعرف لرقم وتنظيفه من أي مسافات
-        target_id = int(str(user_id).strip())
+        # تحويل المعرف لنص لأن نوع العمود في قاعدة بياناتك هو 'text'
+        target_id_str = str(user_id).strip()
         
-        # سطر للفحص: بيطبع لك في الـ Logs وش اللي جالس يحذفه
-        print(f"DEBUG: محاولة حذف المستخدم ذو الرقم: {target_id}")
+        print(f"📡 محاولة حذف المستخدم (نص): {target_id_str}")
         
-        # تنفيذ الحذف
-        cursor.execute("DELETE FROM users WHERE user_id = %s", (target_id,))
+        # تنفيذ الحذف باستخدام النص
+        cursor.execute("DELETE FROM users WHERE user_id = %s", (target_id_str,))
         
         affected = cursor.rowcount
         conn.commit()
         
-        # سطر للفحص: بيقول لك كم صف انحذف فعلياً
-        print(f"DEBUG: عدد الصفوف المحذوفة فعلياً هو: {affected}")
-        
         cursor.close()
         conn.close()
         
+        print(f"✅ نتيجة الحذف: {affected} صفوف")
         return affected > 0
     except Exception as e:
         if conn: conn.rollback()
         print(f"❌ DATABASE ERROR: {e}")
         return False
+
 
 
         
