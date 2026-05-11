@@ -266,18 +266,34 @@ def get_all_user_ids():
         return []
         
 def delete_user(user_id):
-    """حذف مستخدم نهائياً من قاعدة البيانات"""
+def delete_user(user_id):
+    """حذف مستخدم نهائياً من قاعدة البيانات مع التأكد من التنفيذ"""
+    conn = None
     try:
-        conn = get_connection() # أو اسم دالة الاتصال عندك
+        conn = get_connection()
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
+        
+        # التأكد من تحويل المعرف لرقم لتجنب تعارض الأنواع
+        clean_id = int(str(user_id).strip())
+        
+        cursor.execute("DELETE FROM users WHERE user_id = %s", (clean_id,))
+        
+        # معرفة كم صف تأثر بالعملية
+        affected_rows = cursor.rowcount
+        
         conn.commit()
         cursor.close()
         conn.close()
-        return True
+        
+        # إذا كان عدد الصفوف المتأثرة أكبر من 0، يعني الحذف نجح
+        return affected_rows > 0
+        
     except Exception as e:
-        print(f"Error deleting user: {e}")
+        if conn:
+            conn.rollback() # تراجع عن العملية في حال الخطأ
+        print(f"❌ Error deleting user {user_id}: {e}")
         return False
+
         
 def admin_activate_user(user_id, days=30):
     try:
