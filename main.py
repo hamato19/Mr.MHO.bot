@@ -334,7 +334,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
               # --- كود معالجة أزرار التفعيل والحذف للمسؤول ---
         
-        elif data.startswith('act_'):
+        elif data.startswith('ask_act_'):
             # التنسيق المتوقع للبيانات: act_المدة_المعرف
             # مثال: act_60_12345678
             parts = data.split('_')
