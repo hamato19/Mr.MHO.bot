@@ -72,29 +72,25 @@ def get_subscription_options():
     ]
     return InlineKeyboardMarkup(kb)
 # 4. لوحة الأدمن
-def get_admin_keyboard():
+def get_user_control_keyboard(target_id, is_active):
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("👥 إدارة المستخدمين", callback_data='adm_u')],
-        [InlineKeyboardButton("🔑 توليد أكواد", callback_data='adm_gen_menu')],
-         [InlineKeyboardButton("📢 إرسال رسالة للجميع", callback_data='broadcast_prompt')], 
-        back_home_button()
-    ])
+        [InlineKeyboardButton("✅ تفعيل (اختر المدة)", callback_data=f"ask_act_{target_id}")],
+        [InlineKeyboardButton("🗑️ حذف المستخدم", callback_data=f"del_u_{target_id}")],
+        [InlineKeyboardButton("🔙 عودة للقائمة", callback_data='adm_u')]
+    ]) # <-- تأكد أن هنا قوس مربّع ثم هلالي فقط
 
-# 5. قائمة خيارات مدة الكود (للأدمن) - تم إضافة الـ 5 أيام والـ 60 يوم
-def get_generation_menu():
+def get_activation_periods_keyboard(target_id):
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("🎁 تجريبي (5 أيام)", callback_data='gen_5'),
-            InlineKeyboardButton("🗓️ 30 يوم", callback_data='gen_30')
+            InlineKeyboardButton("10 أيام", callback_data=f"act_10_{target_id}"),
+            InlineKeyboardButton("30 يوم", callback_data=f"act_30_{target_id}")
         ],
         [
-            InlineKeyboardButton("🗓️ 60 يوم", callback_data='gen_60'),
-            InlineKeyboardButton("🗓️ 90 يوم", callback_data='gen_90')
+            InlineKeyboardButton("60 يوم", callback_data=f"act_60_{target_id}"),
+            InlineKeyboardButton("90 يوم", callback_data=f"act_90_{target_id}")
         ],
-        [InlineKeyboardButton("🗓️ سنة كاملة (365 يوم)", callback_data='gen_365')],
-        [InlineKeyboardButton("🔙 عودة للأدمن", callback_data='adm')],
-        back_home_button()
-    ])
+        [InlineKeyboardButton("🔙 إلغاء", callback_data=f"view_u_{target_id}")]
+    ]) # <-- تأكد أن هنا قوس مربّع ثم هلالي فقط
 
 # 6. إدارة المستخدمين
 def get_users_management_keyboard(users):
