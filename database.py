@@ -268,34 +268,35 @@ def get_all_user_ids():
 
 
 def delete_user(user_id):
-    """حذف مستخدم نهائياً - النسخة المتوافقة مع Neon Text Column"""
     conn = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
         
-        # تحويل المعرف لنص صريح ونظيف
+        # تنظيف المعرف تماماً من أي مسافات
         target_id = str(user_id).strip()
         
-        # استعلام حذف احترافي:
-        # 1. يستخدم TRIM لإزالة أي مسافات مخفية في القاعدة
-        # 2. يستخدم CAST للتأكد من مطابقة الأنواع
-        query = "DELETE FROM users WHERE TRIM(CAST(user_id AS TEXT)) = %s"
+        # استخدام LIKE لضمان مطابقة النص في Neon 
+        # وضعنا CAST للتأكد أن النوع نصي 100%
+        query = "DELETE FROM users WHERE CAST(user_id AS TEXT) LIKE %s"
         
-        cursor.execute(query, (target_id,))
+        # نرسل المعرف مع علامة % لزيادة دقة البحث
+        cursor.execute(query, (f"%{target_id}%",))
         
         affected = cursor.rowcount
-        conn.commit() # تثبيت العملية
+        conn.commit()
+        
+        print(f"📡 محاولة حذف: {target_id} | النتيجة: {affected} صفوف")
         
         cursor.close()
         conn.close()
         
         return affected > 0
     except Exception as e:
-        if conn:
-            conn.rollback()
+        if conn: conn.rollback()
         print(f"❌ خطأ قاعدة البيانات: {e}")
         return False
+
 
 
 
