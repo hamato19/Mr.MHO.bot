@@ -63,15 +63,7 @@ async def clean_and_show_menu(update_or_query, context, uid):
             if 'temp_msg_ids' not in context.user_data: 
                 context.user_data['temp_msg_ids'] = []
             context.user_data['temp_msg_ids'].append(sent_msg.message_id)
-
-    else:
-        try:
-            await update_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
-        except:
-            sent_msg = await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
-            if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
-            context.user_data['temp_msg_ids'].append(sent_msg.message_id)
-
+            
 # --- 2. معالج الرسائل الموحد (نظام التفعيل المباشر والربط) ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
