@@ -420,8 +420,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
            return
 
 # --- 4. نقطة الانطلاق (محدثة لدخول الأدمن المباشر) ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     await clear_temp_messages(context, uid)
