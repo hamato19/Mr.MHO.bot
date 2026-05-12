@@ -422,15 +422,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # --- 4. نقطة الانطلاق (محدثة لدخول الأدمن المباشر) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
     await clear_temp_messages(context, uid)
     
-    # 🕵️ استثناء الأدمن (admin): يدخل فوراً حتى لو محذوف من القاعدة
+    # --- 1. سجل المستخدم في القاعدة أولاً (سواء أدمن أو مستخدم عادي) ---
+    database.add_new_user(uid) 
+    
+    # --- 2. استثناء الأدمن للدخول المباشر ---
     if str(uid) == str(config.ADMIN_ID):
         await clean_and_show_menu(update, context, uid)
         return
 
+    # --- 3. البقية يكملون الفحص المعتاد ---
     user = database.get_user_profile(uid)
     if not user:
+        # هذه الحالة قد لا تحدث الآن لأننا أضفناه فوق، لكن نتركها للأمان
         await update.message.reply_text(
             privacy_policy.DISCLAIMER_TEXT, 
             parse_mode='HTML', 
@@ -438,6 +445,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await clean_and_show_menu(update, context, uid)
+
 async def main():
     database.init_db() 
     await web_server.start_server() 
