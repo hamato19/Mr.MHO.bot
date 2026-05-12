@@ -144,8 +144,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try: await query.answer()
     except: pass
-        # كود الحذف الجديد (المنقذ)
-   if data.startswith('del_u_'):
+        # --- تأكد أن المسافة هنا (قبل if) مطابقة تماماً للسطر اللي فوقها ---
+     if data.startswith('del_u_'):
         u_id = data.replace('del_u_', '')
         print(f"🚨 DEBUG_TRIGGERED: الحذف مطلوب للمعرف [{u_id}]")
         try:
@@ -160,6 +160,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logging.error(f"Error in delete: {e}")
             await query.answer("🚨 خطأ تقني في الحذف")
         return
+        
     if data == 'accept_tos':
         # 1. تسجيل المستخدم في قاعدة البيانات (أو التأكد من وجوده)
         database.add_new_user(uid) 
