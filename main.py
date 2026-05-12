@@ -374,23 +374,23 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=keyboards.get_activation_periods_keyboard(target_id)
             )
             return
-            # تأكد أن الـ elif هذه تحت الـ elif اللي قبلها بالضبط
-       elif data.startswith('del_u_'):
+            # تأكد أن المسافات هنا (قبل كلمة elif) مطابقة لما قبلها في الكود
+        elif data.startswith('del_u_'):
             u_id = data.replace('del_u_', '')
-            
-            # 🔍 كشف المعرف المستلم من الزر
-            print(f"DEBUG: الزر أرسل المعرف التالي: [{u_id}]") 
+            # طباعة للكشف في الـ Logs
+            print(f"DEBUG: RECEIVED_FROM_BUTTON: [{u_id}]")
             
             try:
+                # استدعاء الحذف
                 if database.delete_user(u_id):
                     await query.answer(f"🗑️ تم حذف: {u_id}", show_alert=True)
                     await clean_and_show_menu(query, context, uid)
                 else:
-                    # طباعة فشل مع نوع البيانات
-                    print(f"DEBUG: قاعدة البيانات لم تجد المعرف [{u_id}]")
-                    await query.answer(f"❌ فشل الحذف لليوزر: {u_id}", show_alert=True)
+                    print(f"DEBUG: DATABASE_NOT_FOUND: [{u_id}]")
+                    await query.answer(f"❌ لم يتم العثور على المعرف", show_alert=True)
             except Exception as e:
                 logging.error(f"Error in delete: {e}")
+                await query.answer("🚨 خطأ في العملية")
             return
     
         elif data == 'adm_gen_menu': # قائمة التوليد
