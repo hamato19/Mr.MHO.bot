@@ -30,9 +30,38 @@ async def clean_and_show_menu(update_or_query, context, uid):
     markup = await keyboards.get_main_menu(uid, bot_info.username)
     
     # حماية: إذا لم يكن أدمن وغير مفعل، تظهر قائمة الاشتراك فقط
-    if not is_owner and (not user or not user.get('is_activated')):
+    async def clean_and_show_menu(update_or_query, context, uid):
+    """عرض القائمة الرئيسية مع تنظيف شامل لضمان ثبات الواجهة"""
+    await clear_temp_messages(context, uid)
+    
+    # 🕵️ تأكيد جلب أحدث بيانات من القاعدة لضمان حالة التفعيل
+    user = database.get_user_profile(uid)
+    bot_info = await context.bot.get_me()
+    is_owner = (str(uid) == str(config.ADMIN_ID))
+    
+    # تحسين الفحص: إذا كان مفعل أو أدمن، يرى القائمة الكاملة
+    is_active = user.get('is_activated') if user else False
+    
+    if is_owner or is_active:
+        text = "🏠 <b>قائمة التحكم بـ سمو الأرقام:</b>"
+        markup = await keyboards.get_main_menu(uid, bot_info.username)
+    else:
+        # للمشتركين غير المفعلين فقط
         text = "⚠️ <b>حسابك غير مفعل حالياً.</b>\nيرجى الاشتراك أو إرسال كود التفعيل في الشات:"
         markup = keyboards.get_subscription_options()
+
+    # (باقي كود الإرسال والتعديل كما هو...)
+    if isinstance(update_or_query, Update):
+        sent_msg = await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+        if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
+        context.user_data['temp_msg_ids'].append(sent_msg.message_id)
+    else:
+        try:
+            await update_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
+        except:
+            sent_msg = await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+            if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
+            context.user_data['temp_msg_ids'].append(sent_msg.message_id)
 
     if isinstance(update_or_query, Update):
         sent_msg = await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
@@ -161,7 +190,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("🚨 خطأ تقني في الحذف")
         return
         
-    if data == 'accept_tos':
+   if data == 'accept_tos':
         if data == 'accept_tos':
         # 1. تسجيل المستخدم أولاً (أو التأكد من وجوده)
         database.add_new_user(uid) 
