@@ -21,15 +21,17 @@ async def clear_temp_messages(context, uid):
 
 # --- 1. نظام التنظيف والعرض الموحد (تم حذف التكرار) ---
 async def clean_and_show_menu(update_or_query, context, uid):
-    """عرض القائمة مرة واحدة فقط بناءً على حالة الحساب"""
+async def clean_and_show_menu(update_or_query, context, uid):
+    """عرض القائمة الرئيسية مع تنظيف شامل لضمان ثبات الواجهة"""
     await clear_temp_messages(context, uid)
     
+    # جلب البيانات والتأكد من الهوية
     user = database.get_user_profile(uid)
     bot_info = await context.bot.get_me()
     is_owner = (str(uid) == str(config.ADMIN_ID))
     is_active = user.get('is_activated') if user else False
     
-    # تحديد المحتوى بناءً على الصلاحية
+    # تحديد النص والأزرار بناءً على الحالة
     if is_owner or is_active:
         text = "🏠 <b>قائمة التحكم بـ سمو الأرقام:</b>"
         markup = await keyboards.get_main_menu(uid, bot_info.username)
@@ -37,16 +39,20 @@ async def clean_and_show_menu(update_or_query, context, uid):
         text = "⚠️ <b>حسابك غير مفعل حالياً.</b>\nيرجى الاشتراك أو إرسال كود التفعيل في الشات:"
         markup = keyboards.get_subscription_options()
 
-    # تنفيذ الإرسال أو التعديل (مرة واحدة فقط)
+    # معالجة الإرسال أو التعديل
     if isinstance(update_or_query, Update):
         sent_msg = await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
-        context.user_data.setdefault('temp_msg_ids', []).append(sent_msg.message_id)
+        if 'temp_msg_ids' not in context.user_data: 
+            context.user_data['temp_msg_ids'] = []
+        context.user_data['temp_msg_ids'].append(sent_msg.message_id)
     else:
         try:
             await update_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
-        except:
+        except Exception:
             sent_msg = await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
-            context.user_data.setdefault('temp_msg_ids', []).append(sent_msg.message_id)
+            if 'temp_msg_ids' not in context.user_data: 
+                context.user_data['temp_msg_ids'] = []
+            context.user_data['temp_msg_ids'].append(sent_msg.message_id)
 
     else:
         try:
