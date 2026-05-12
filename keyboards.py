@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def get_disclaimer_keyboard():
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📜 سياسة الخصوصية", callback_data='view_priv')],
-        [InlineKeyboardButton("✅ موافق وأرغب بالتفعيل", callback_data='accept_tos')],
+        [InlineKeyboardButton("✅ موافق ", callback_data='accept_tos')],
         [InlineKeyboardButton("❌ رفض", callback_data='reject_tos')]
     ])
 
@@ -38,18 +38,18 @@ async def get_main_menu(uid, bot_username="bot"):
         [InlineKeyboardButton("☎️ الدعم الفني", url=config.SUPPORT_LINK)]
     ]
     if str(uid) == str(config.ADMIN_ID):
-        kb.append([InlineKeyboardButton("👮 لوحة الأدمن", callback_data='adm')])
+        kb.append([InlineKeyboardButton("Admin panel", callback_data='adm')])
     return InlineKeyboardMarkup(kb)
 
 # --- 4. لوحة الأدمن الرئيسية ---
 def get_admin_keyboard():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("👥 إدارة المستخدمين", callback_data='adm_u'),
+            InlineKeyboardButton("👥 إدارة الاشتراكات", callback_data='adm_u'),
             InlineKeyboardButton("🎫 توليد أكواد", callback_data='adm_gen_menu')
         ],
         [
-            InlineKeyboardButton("📢 إرسال إذاعة", callback_data='broadcast_prompt'),
+            InlineKeyboardButton("📢 إرسال تنبية للاعضاء", callback_data='broadcast_prompt'),
             InlineKeyboardButton("📊 الإحصائيات", callback_data='adm')
         ],
         [InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data='home')]
