@@ -162,41 +162,39 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     if data == 'accept_tos':
-        # 1. تسجيل المستخدم في قاعدة البيانات
+        if data == 'accept_tos':
+        # 1. تسجيل المستخدم أولاً (أو التأكد من وجوده)
         database.add_new_user(uid) 
         
-        # --- التعديل هنا: إذا كان أدمن، ادخل فوراً للقائمة بدون فحص اشتراك ---
+        # 2. الحماية القصوى: إذا كان أدمن، ادخل فوراً للقائمة
         if is_owner:
-            await query.message.reply_text(f"👑 <b>أهلاً بك يا مدير (ID: {uid})</b>\nتم الدخول بصلاحيات الأدمن.", parse_mode='HTML')
+            await query.message.reply_text(f"👑 <b>أهلاً بك يا مدير (ID: {uid})</b>", parse_mode='HTML')
             await clean_and_show_menu(query, context, uid)
             return
-        # -------------------------------------------------------------
 
-        # 2. جلب بيانات المستخدم العادي للتحقق من الاشتراك
+        # 3. جلب بيانات المستخدم (للمستخدمين العاديين فقط)
         user = database.get_user_profile(uid)
+        
+        # حماية من الـ NoneType: إذا فشل جلب البيانات، نعطي قيم افتراضية
+        if user is None:
+            is_active = False
+            expiry_date = None
+        else:
+            is_active = user.get('is_activated', False)
+            expiry_date = user.get('expiry_date')
+
         from datetime import datetime
         now = datetime.now()
 
-        is_active = user.get('is_activated') if user else False
-        expiry_date = user.get('expiry_date') if user else None
-        
-        # شرط التجاوز للمستخدمين العاديين
+        # شرط التجاوز للمشتركين
         if is_active and expiry_date and expiry_date > now:
-            await query.message.reply_text(f"✅ تم التحقق من الحساب (ID: <code>{uid}</code>)\nأهلاً بك مجدداً في سمو الأرقام.", parse_mode='HTML')
+            await query.message.reply_text(f"✅ تم التحقق من الحساب (ID: <code>{uid}</code>)", parse_mode='HTML')
             await clean_and_show_menu(query, context, uid)
         else:
-            # رسالة المنع إذا كان جديداً أو منتهياً
-            status_text = "حسابك منتهي الاشتراك" if is_active else "الحساب غير مفعل حالياً"
-            await query.message.reply_text(
-                f"✅ <b>تم قبول السياسة بنجاح.</b>\n\n"
-                f"⚠️ {status_text}.\n"
-                f"لا يمكنك تجاوز هذه المرحلة والوصول للقائمة الرئيسية إلا بعد التفعيل.\n\n"
-                f"يرجى إرسال <b>كود التفعيل</b> الخاص بك الآن في الشات\n"
-                f"(مثال: <code>SMO-XXXX</code>):",
-                parse_mode='HTML',
-                reply_markup=keyboards.get_subscription_options() # أزرار الدعم والاشتراك فقط
-            )
+            # رسالة طلب التفعيل
+            await query.message.reply_text("⚠️ حسابك غير مفعل حالياً، يرجى إرسال كود التفعيل.", parse_mode='HTML')
         return
+
 
     elif data == 'reject_tos':
         # معالجة حالة رفض السياسة
