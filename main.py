@@ -190,9 +190,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("🚨 خطأ تقني في الحذف")
         return
         
-     if data == 'accept_tos':
-        if data == 'accept_tos':
-        # 1. تسجيل المستخدم أولاً (أو التأكد من وجوده)
+    if data == 'accept_tos':
         database.add_new_user(uid) 
         
         # 2. الحماية القصوى: إذا كان أدمن، ادخل فوراً للقائمة
