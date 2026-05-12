@@ -267,7 +267,7 @@ def get_all_user_ids():
         
 
 
-def delete_user(user_id):
+
 def delete_user(user_id):
     """حذف مستخدم نهائياً باستخدام النظام الموحد"""
     try:
