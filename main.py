@@ -21,7 +21,6 @@ async def clear_temp_messages(context, uid):
 
 # --- 1. نظام التنظيف والعرض الموحد (تم حذف التكرار) ---
 async def clean_and_show_menu(update_or_query, context, uid):
-async def clean_and_show_menu(update_or_query, context, uid):
     """عرض القائمة الرئيسية مع تنظيف شامل لضمان ثبات الواجهة"""
     await clear_temp_messages(context, uid)
     
