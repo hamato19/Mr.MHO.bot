@@ -38,21 +38,23 @@ async def clean_and_show_menu(update_or_query, context, uid):
         text = "⚠️ <b>حسابك غير مفعل حالياً.</b>\nيرجى الاشتراك أو إرسال كود التفعيل في الشات:"
         markup = keyboards.get_subscription_options()
 
+    # --- بداية منطقة معالجة الإرسال الذكية ---
     sent_msg = None
-    # معالجة الإرسال (تعديل الرسالة الحالية أو إرسال رسالة جديدة)
-    if hasattr(update_or_query, 'edit_message_text'):  # إذا كان CallbackQuery
+    if hasattr(update_or_query, 'edit_message_text'):  # حالة الضغط على زر
         try:
             sent_msg = await update_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
         except Exception:
+            # إذا فشل التعديل (مثلاً الرسالة قديمة)، نرسل رسالة جديدة
             sent_msg = await context.bot.send_message(chat_id=uid, text=text, parse_mode='HTML', reply_markup=markup)
-    else:  # إذا كان Update عادي (رسالة نصية)
+    else:  # حالة أمر نصي مثل /start
         sent_msg = await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
 
-    # 💡 حفظ معرف الرسالة للمسح لاحقاً (مرة واحدة فقط لجميع الحالات)
+    # حفظ معرف الرسالة للمسح لاحقاً - يتم التنفيذ مرة واحدة فقط لكل الحالات
     if sent_msg:
         if 'temp_msg_ids' not in context.user_data: 
             context.user_data['temp_msg_ids'] = []
         context.user_data['temp_msg_ids'].append(sent_msg.message_id)
+    # --- نهاية منطقة المعالجة ---
     else:
         try:
             await update_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
