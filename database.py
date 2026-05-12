@@ -268,32 +268,29 @@ def get_all_user_ids():
 
 
 def delete_user(user_id):
-    conn = None
+def delete_user(user_id):
+    """حذف مستخدم نهائياً باستخدام النظام الموحد"""
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        
-        # تحويل المعرف لنص وتطهيره
+        # تطهير المعرف من أي مسافات مخفية
         target_id = str(user_id).strip()
+        print(f"📡 DB_ATTEMPT: جاري محاولة حذف [{target_id}] من القاعدة...")
         
-        # 🔍 كشف القيمة النهائية قبل تنفيذ الـ SQL
-        print(f"DEBUG: سيتم تنفيذ الحذف في SQL للمعرف: [{target_id}]")
-        
-        # استعلام الحذف البسيط
-        cursor.execute("DELETE FROM users WHERE user_id = %s", (target_id,))
-        
-        affected = cursor.rowcount
-        conn.commit()
-        
-        print(f"DEBUG: نتيجة الحذف في القاعدة: {affected} صفوف متأثرة")
-        
-        cursor.close()
-        conn.close()
-        return affected > 0
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                # حذف المستخدم من جدول المستخدمين
+                cur.execute("DELETE FROM users WHERE user_id = %s", (target_id,))
+                affected = cur.rowcount
+                
+                # حذف القنوات المرتبطة به أيضاً لضمان نظافة القاعدة
+                cur.execute("DELETE FROM entities WHERE user_id = %s", (target_id,))
+                
+                conn.commit()
+                print(f"✅ DB_SUCCESS: تم حذف [{target_id}] - الصفوف المتأثرة: {affected}")
+                return affected > 0
     except Exception as e:
-        print(f"DEBUG: حدث خطأ داخل القاعدة: {e}")
-        if conn: conn.close()
+        logging.error(f"❌ DB_ERROR في دالة الحذف: {e}")
         return False
+
 
 
  
