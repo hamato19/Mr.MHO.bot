@@ -268,44 +268,35 @@ def get_all_user_ids():
 
 
 def delete_user(user_id):
-    """حذف المستخدم بمحاكاة دقيقة لأمر الـ SQL الناجح"""
     conn = None
     try:
         conn = get_connection()
         cursor = conn.cursor()
         
-        # تحويل المعرف لنص وتطهيره من أي مسافات
+        # تحويل المعرف لنص وتطهيره
         target_id = str(user_id).strip()
         
-        # نستخدم الاستعلام اللي نجح معك يدوياً
-        # TRIM يضمن إزالة أي فراغات مخفية في القاعدة
-        query = "DELETE FROM users WHERE TRIM(user_id) = %s"
+        # 🔍 كشف القيمة النهائية قبل تنفيذ الـ SQL
+        print(f"DEBUG: سيتم تنفيذ الحذف في SQL للمعرف: [{target_id}]")
         
-        cursor.execute(query, (target_id,))
+        # استعلام الحذف البسيط
+        cursor.execute("DELETE FROM users WHERE user_id = %s", (target_id,))
+        
         affected = cursor.rowcount
-        
-        # تثبيت العملية فوراً
         conn.commit()
         
-        print(f"📡 SQL Execution: DELETE for ID {target_id} | Rows affected: {affected}")
+        print(f"DEBUG: نتيجة الحذف في القاعدة: {affected} صفوف متأثرة")
         
         cursor.close()
         conn.close()
-        
         return affected > 0
     except Exception as e:
-        if conn:
-            conn.rollback()
-            conn.close()
-        print(f"❌ Database Error: {e}")
+        print(f"DEBUG: حدث خطأ داخل القاعدة: {e}")
+        if conn: conn.close()
         return False
 
 
-
-
-
-
-        
+ 
 def admin_activate_user(user_id, days=30):
     try:
         # هنا يتم استخدام عدد الأيام المختار (10, 30, 60, أو 90)
