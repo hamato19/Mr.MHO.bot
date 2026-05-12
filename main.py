@@ -375,8 +375,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
             # تأكد أن الـ elif هذه تحت الـ elif اللي قبلها بالضبط
-        elif data.startswith('del_u_'):
-            u_id = data.replace('del_u_', ''
+       elif data.startswith('del_u_'):
+            u_id = data.replace('del_u_', '')
+            
             # 🔍 كشف المعرف المستلم من الزر
             print(f"DEBUG: الزر أرسل المعرف التالي: [{u_id}]") 
             
