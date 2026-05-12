@@ -161,11 +161,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("🚨 خطأ تقني في الحذف")
         return
         
-    if data == 'accept_tos':
-        # 1. تسجيل المستخدم في قاعدة البيانات (أو التأكد من وجوده)
+     if data == 'accept_tos':
+        # 1. تسجيل المستخدم في قاعدة البيانات
         database.add_new_user(uid) 
         
-        # 2. جلب بيانات المستخدم للتحقق من حالة الاشتراك والـ ID
+        # --- التعديل هنا: إذا كان أدمن، ادخل فوراً للقائمة بدون فحص اشتراك ---
+        if is_owner:
+            await query.message.reply_text(f"👑 <b>أهلاً بك يا مدير (ID: {uid})</b>\nتم الدخول بصلاحيات الأدمن.", parse_mode='HTML')
+            await clean_and_show_menu(query, context, uid)
+            return
+        # -------------------------------------------------------------
+
+        # 2. جلب بيانات المستخدم العادي للتحقق من الاشتراك
         user = database.get_user_profile(uid)
         from datetime import datetime
         now = datetime.now()
@@ -173,7 +180,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         is_active = user.get('is_activated') if user else False
         expiry_date = user.get('expiry_date') if user else None
         
-        # شرط التجاوز: حساب مفعل + تاريخ انتهاء لم يأتِ بعد
+        # شرط التجاوز للمستخدمين العاديين
         if is_active and expiry_date and expiry_date > now:
             await query.message.reply_text(f"✅ تم التحقق من الحساب (ID: <code>{uid}</code>)\nأهلاً بك مجدداً في سمو الأرقام.", parse_mode='HTML')
             await clean_and_show_menu(query, context, uid)
@@ -412,10 +419,16 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
            context.user_data['waiting_for_broadcast'] = True
            return
 
-# --- 4. نقطة الانطلاق (خارج الدالة السابقة) ---
+# --- 4. نقطة الانطلاق (محدثة لدخول الأدمن المباشر) ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     await clear_temp_messages(context, uid)
+    
+    # 🕵️ استثناء الأدمن (admin): يدخل فوراً حتى لو محذوف من القاعدة
+    if str(uid) == str(config.ADMIN_ID):
+        await clean_and_show_menu(update, context, uid)
+        return
+
     user = database.get_user_profile(uid)
     if not user:
         await update.message.reply_text(
@@ -425,7 +438,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await clean_and_show_menu(update, context, uid)
-
 async def main():
     database.init_db() 
     await web_server.start_server() 
