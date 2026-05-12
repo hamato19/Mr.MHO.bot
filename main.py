@@ -144,6 +144,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try: await query.answer()
     except: pass
+        # كود الحذف الجديد (المنقذ)
+   if data.startswith('del_u_'):
+        u_id = data.replace('del_u_', '')
+        print(f"🚨 DEBUG_TRIGGERED: الحذف مطلوب للمعرف [{u_id}]")
+        try:
+            if database.delete_user(u_id):
+                print(f"✅ DEBUG_SUCCESS: تم حذف {u_id} من القاعدة")
+                await query.answer(f"🗑️ تم حذف المستخدم بنجاح", show_alert=True)
+                await clean_and_show_menu(query, context, uid)
+            else:
+                print(f"❌ DEBUG_FAILED: القاعدة لم تجد المعرف [{u_id}]")
+                await query.answer("❌ فشل الحذف: المعرف غير موجود", show_alert=True)
+        except Exception as e:
+            logging.error(f"Error in delete: {e}")
+            await query.answer("🚨 خطأ تقني في الحذف")
+        return
     if data == 'accept_tos':
         # 1. تسجيل المستخدم في قاعدة البيانات (أو التأكد من وجوده)
         database.add_new_user(uid) 
@@ -374,24 +390,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=keyboards.get_activation_periods_keyboard(target_id)
             )
             return
-            # تأكد أن المسافات هنا (قبل كلمة elif) مطابقة لما قبلها في الكود
-        elif data.startswith('del_u_'):
-            u_id = data.replace('del_u_', '')
-            # طباعة للكشف في الـ Logs
-            print(f"DEBUG: RECEIVED_FROM_BUTTON: [{u_id}]")
             
-            try:
-                # استدعاء الحذف
-                if database.delete_user(u_id):
-                    await query.answer(f"🗑️ تم حذف: {u_id}", show_alert=True)
-                    await clean_and_show_menu(query, context, uid)
-                else:
-                    print(f"DEBUG: DATABASE_NOT_FOUND: [{u_id}]")
-                    await query.answer(f"❌ لم يتم العثور على المعرف", show_alert=True)
-            except Exception as e:
-                logging.error(f"Error in delete: {e}")
-                await query.answer("🚨 خطأ في العملية")
-            return
     
         elif data == 'adm_gen_menu': # قائمة التوليد
             await query.edit_message_text("🔑 <b>توليد الأكواد:</b>\nاختر المدة:", parse_mode='HTML', reply_markup=keyboards.get_generation_menu())
