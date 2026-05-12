@@ -30,7 +30,7 @@ async def clean_and_show_menu(update_or_query, context, uid):
     markup = await keyboards.get_main_menu(uid, bot_info.username)
     
     # حماية: إذا لم يكن أدمن وغير مفعل، تظهر قائمة الاشتراك فقط
-    async def clean_and_show_menu(update_or_query, context, uid):
+async def clean_and_show_menu(update_or_query, context, uid):
     """عرض القائمة الرئيسية مع تنظيف شامل لضمان ثبات الواجهة"""
     await clear_temp_messages(context, uid)
     
