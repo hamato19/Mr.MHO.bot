@@ -145,7 +145,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try: await query.answer()
     except: pass
         # --- تأكد أن المسافة هنا (قبل if) مطابقة تماماً للسطر اللي فوقها ---
-     if data.startswith('del_u_'):
+    if data.startswith('del_u_'):
         u_id = data.replace('del_u_', '')
         print(f"🚨 DEBUG_TRIGGERED: الحذف مطلوب للمعرف [{u_id}]")
         try:
