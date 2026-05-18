@@ -313,7 +313,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logging.error(f"Error deleting entity: {e}")
             return  
         
-       elif data == 'add_channel':
+    elif data == 'add_channel':
             await keyboards.process_add_channel_logic(query, context, uid, is_owner, user, database)
             return
     if is_owner:
