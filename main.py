@@ -110,7 +110,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     # ب: التعامل مع ربط القنوات (Request Chat)
+    # ب: التعامل مع ربط القنوات (Request Chat)
     if update.message.chat_shared:
+        # 🚀 الفحص: إذا لم يكن أدمن، نتحقق من شرط القناة الواحدة
         if str(uid) != str(config.ADMIN_ID):
             existing_channels = database.get_user_entities(uid)
             if existing_channels:
@@ -120,19 +122,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif len(existing_channels[0]) > 2:
                     current_ch_name = existing_channels[0][2]
 
+                # إرسال رسالة التنبيه للمشترك
                 await update.message.reply_text(
-                    f"⚠️ <b>تنبيه للمشتركين:</b>\nهذا الحساب مرتبط بالفعل بقناة: (<code>{current_ch_name}</code>).\n\n"
-                    f"عليك حذف القناة المضافة أولاً لتتمكن من تغيير القناة.\n"
-                    f"💡 <i>(ميزة تعدد القنوات خاصة بالإدارة فقط)</i>",
+                    f"⚠️ <b>عذراً، يمكنك إضافة قناة واحدة فقط كحد أقصى!</b>\n\n"
+                    f"حسابك مرتبط حالياً بـ: (<code>{current_ch_name}</code>).\n"
+                    f"يرجى الانتقال إلى قسم '📋 إدارة القنوات' وحذفها أولاً لتتمكن من التغيير.\n\n"
+                    f"🔄 <i>جاري تحويلك الآن إلى القائمة الرئيسية...</i>",
                     parse_mode='HTML'
                 )
-                await asyncio.sleep(1)
+                
+                # 🔄 ربط فوري: الانتظار ثانيتين ثم مسح الرسائل المؤقتة وإعادة عرض القائمة الرئيسية تلقائياً
+                await asyncio.sleep(2)
                 await clean_and_show_menu(update, context, uid)
-                return
+                return # الخروج الآمن والعودة للقائمة دون تجميد الواجهة
 
+        # ✅ للأدمن (أو المشترك العادي إذا لم يملك قناة مسبقاً): يتم الحفظ بشكل طبيعي
         database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
         await update.message.reply_text("✅ تم ربط القناة بنجاح!")
-        await asyncio.sleep(1)
+        await asyncio.sleep(1.5)
         await clean_and_show_menu(update, context, uid)
         return
 
