@@ -311,13 +311,9 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await query.edit_message_text("📋 <b>قنواتك المرتبطة حالياً:</b>", parse_mode='HTML', reply_markup=keyboards.get_entities_keyboard(ents))
             except Exception as e:
                 logging.error(f"Error deleting entity: {e}")
-            return
-
+            return  
         
-        
-        
-        
-       elif data == 'add_channel':
+      elif data == 'add_channel':
             # السماح للأدمن دائماً، أو للمشترك النشط
             if is_owner or (user and user.get('is_activated')):
                 
