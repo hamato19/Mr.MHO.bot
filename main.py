@@ -110,8 +110,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     # ب: التعامل مع ربط القنوات (Request Chat)
-    # ب: التعامل مع ربط القنوات (Request Chat)
-    if update.message.chat_shared:
+     if update.message.chat_shared:
         # 🚀 الفحص: إذا لم يكن أدمن، نتحقق من شرط القناة الواحدة
         if str(uid) != str(config.ADMIN_ID):
             existing_channels = database.get_user_entities(uid)
@@ -122,20 +121,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 elif len(existing_channels[0]) > 2:
                     current_ch_name = existing_channels[0][2]
 
-                # إرسال رسالة التنبيه للمشترك
+                # إنشاء زر العودة المباشر للقائمة الرئيسية
+                back_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="home")]
+                ])
+
+                # إرسال رسالة التنبيه مع الزر
                 await update.message.reply_text(
                     f"⚠️ <b>عذراً، يمكنك إضافة قناة واحدة فقط كحد أقصى!</b>\n\n"
                     f"حسابك مرتبط حالياً بـ: (<code>{current_ch_name}</code>).\n"
-                    f"يرجى الانتقال إلى قسم '📋 إدارة القنوات' وحذفها أولاً لتتمكن من التغيير.\n\n"
-                    f"🔄 <i>جاري تحويلك الآن إلى القائمة الرئيسية...</i>",
-                    parse_mode='HTML'
+                    f"توجه إلى قسم <b>إدارة القنوات</b> لحذف القناة المضافة أولاً لتتمكن من إضافة قناة جديدة.",
+                    parse_mode='HTML',
+                    reply_markup=back_keyboard
                 )
-                
-                # 🔄 ربط فوري: الانتظار ثانيتين ثم مسح الرسائل المؤقتة وإعادة عرض القائمة الرئيسية تلقائياً
-                await asyncio.sleep(2)
-                await clean_and_show_menu(update, context, uid)
-                return # الخروج الآمن والعودة للقائمة دون تجميد الواجهة
+                return  # الخروج الآمن وبقاء زر العودة نشطاً للمستخدم
 
+        # ✅ للأدمن (أو المشترك العادي إذا لم يملك قناة مسبقاً): يتم الحفظ بشكل طبيعي
+        database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
+        await update.message.reply_text("✅ تم ربط القناة بنجاح!")
+        await asyncio.sleep(1.5)
+        await clean_and_show_menu(update, context, uid)
+        return
         # ✅ للأدمن (أو المشترك العادي إذا لم يملك قناة مسبقاً): يتم الحفظ بشكل طبيعي
         database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
         await update.message.reply_text("✅ تم ربط القناة بنجاح!")
