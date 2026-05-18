@@ -315,6 +315,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         
         
+        
         elif data == 'add_channel':
             # السماح للأدمن دائماً، أو للمشترك النشط
             if is_owner or (user and user.get('is_activated')):
@@ -327,8 +328,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         return
 
                 # 1. حذف الرسالة القديمة لتنظيف الشاشة
-                try: await query.message.delete()
-                except: pass
+                try: 
+                    await query.message.delete()
+                except: 
+                    pass
 
                 # 2. إرسال رسالة جديدة تماماً تطلب القناة
                 await context.bot.send_message(
