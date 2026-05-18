@@ -140,7 +140,45 @@ def get_request_channel_keyboard(user_id=1):
     ], resize_keyboard=True, one_time_keyboard=True)
 
 
-# --- دوال مساعدة ---
+# --- دوال مساعدة وتحكم خارجي ---
 def get_back_home():
     """زر موحد للعودة للقائمة الرئيسية في أي وقت"""
     return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 العودة للقائمة", callback_data='home')]])
+
+
+async def process_add_channel_logic(query, context, uid, is_owner, user, database):
+    """دالة مستقلة لمعالجة ربط القنوات معزولة داخل موديول الكيبورد لحل مشاكل السيرفر نهائياً"""
+    # السماح للأدمن دائماً، أو للمشترك النشط
+    if is_owner or (user and user.get('is_activated')):
+        
+        # فحص إضافي للمشترك العادي لمنعه من طلب زر التفويض إذا كان يملك قناة فعلاً
+        if not is_owner:
+            ents = database.get_user_entities(uid)
+            if ents and len(ents) >= 1:
+                await query.answer("⚠️ عذراً، يمكنك إضافة قناة واحدة فقط كحد أقصى!", show_alert=True)
+                return
+
+        # 1. استجابة سريعة للزر لتفادي الساعة الرملية المعلقة
+        try:
+            await query.answer()
+        except:
+            pass
+
+        # 2. تعديل نص الرسالة الحالية لتوجيه المستخدم للنظر بالأسفل
+        try:
+            await query.edit_message_text(
+                text="⏳ <b>جاري فتح معالج الربط...</b>\n\nالرجاء النظر إلى أسفل الشاشة واستخدام الكيبورد المظهر هناك لاختيار قناتك وتفويض البوت.",
+                parse_mode='HTML'
+            )
+        except:
+            pass
+
+        # 3. إرسال الكيبورد الخاص بطلب تفويض القناة وتمرير الـ uid كمعرف فريد
+        await context.bot.send_message(
+            chat_id=uid,
+            text="📢 <b>نظام ربط وتفويض القنوات المطور:</b>\n\nاضغط على الزر الأزرق الكبير بالأسفل واقرن قناتك ببوت الإشارات مباشرة.",
+            parse_mode='HTML',
+            reply_markup=get_request_channel_keyboard(uid)
+        )
+    else:
+        await query.answer("⚠️ عذراً، هذه الميزة للمشتركين فقط.", show_alert=True)
