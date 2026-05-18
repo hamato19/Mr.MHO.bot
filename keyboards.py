@@ -178,3 +178,47 @@ async def process_add_channel_logic(query, context, uid, is_owner, user, databas
         )
     except Exception as send_err:
         logger.error(f"Failed to send request channel markup: {send_err}")
+
+async def process_add_channel_logic(query, context, uid, is_owner, user, database):
+    """معالجة فحص وإضافة القنوات مع إظهار زر العودة المباشر لمنع تجمد المحادثة"""
+    try:
+        await query.answer()  # تفريغ النبضة فوراً لمنع تعليق الزر عند النقر
+    except:
+        pass
+
+    # 1. فحص إذا كان المستخدم العادي تجاوز الحد لتنبيهه فوراً مع زر العودة
+    if not is_owner:
+        try:
+            ents = database.get_user_entities(uid)
+            if ents and len(ents) >= 1:
+                # إنشاء زر العودة الموحد
+                back_keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 العودة للقائمة الرئيسية", callback_data="home")]
+                ])
+                
+                # تعديل الرسالة وإرفاق الزر لمنع تجميد الشات
+                await query.edit_message_text(
+                    text="⚠️ <b>عذراً، يمكنك إضافة قناة واحدة فقط كحد أقصى!</b>\n\n"
+                         "توجه إلى قسم <b>📋 قنواتي</b> لحذف القناة المضافة أولاً لتتمكن من إضافة قناة جديدة.",
+                    parse_mode='HTML',
+                    reply_markup=back_keyboard
+                )
+                return
+        except Exception as db_err:
+            logger.error(f"Database check failed: {db_err}")
+
+    # 2. فتح واجهة الربط بشكل طبيعي للمشترك الجديد أو الأدمن
+    try:
+        await query.edit_message_text(
+            text="⏳ <b>جاري فتح معالج الربط...</b>\n\nالرجاء النظر إلى أسفل الشاشة واستخدم الكيبورد المظهر هناك لاختيار قناتك.",
+            parse_mode='HTML'
+        )
+        
+        await context.bot.send_message(
+            chat_id=uid,
+            text="📢 <b>نظام ربط وتفويض القنوات المطور:</b>\n\nاضغط على الزر بالأسفل واقرن قناتك ببوت الإشارات.",
+            parse_mode='HTML',
+            reply_markup=get_request_channel_keyboard(uid)
+        )
+    except Exception as send_err:
+        logger.error(f"Failed to send request channel markup: {send_err}")
