@@ -121,28 +121,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     # ب: التعامل مع ربط القنوات (Request Chat)
+    # ب: التعامل مع ربط القنوات (Request Chat)
     if update.message.chat_shared:
-        # 1. 🚀 الفحص: هل المستخدم لديه قناة مضافة مسبقاً؟
-        existing_channels = database.get_user_entities(uid)
-        
-        if existing_channels:
-            # إذا وجدنا قناة، نرسل رسالة التنبيه ونوقف العملية فوراً
-            # (نأخذ أول قناة لأن نظامك يضمن وجود واحدة فقط)
-            current_ch_name = "قناة مضافة"
-            if isinstance(existing_channels[0], dict):
-                current_ch_name = existing_channels[0].get('entity_name', 'قناة مضافة')
-            elif len(existing_channels[0]) > 2:
-                current_ch_name = existing_channels[0][2]
+        # 🚀 الفحص: إذا لم يكن أدمن، نتحقق من شرط القناة الواحدة
+        if str(uid) != str(config.ADMIN_ID):
+            existing_channels = database.get_user_entities(uid)
+            
+            if existing_channels:
+                # إذا وجدنا قناة للمشترك العادي، نرسل رسالة التنبيه ونوقف العملية فوراً
+                current_ch_name = "قناة مضافة"
+                if isinstance(existing_channels[0], dict):
+                    current_ch_name = existing_channels[0].get('entity_name', 'قناة مضافة')
+                elif len(existing_channels[0]) > 2:
+                    current_ch_name = existing_channels[0][2]
 
-            await update.message.reply_text(
-                f"⚠️ <b>تنبيه:</b>\nهذا الحساب مرتبط بالفعل بقناة: (<code>{current_ch_name}</code>).\n\n"
-                f"عليك حذف القناة المضافة أولاً لتتمكن من تغيير القناة.",
-                parse_mode='HTML'
-            )
-            await asyncio.sleep(1)
-            await clean_and_show_menu(update, context, uid)
-            return # الخروج من الدالة دون إضافة القناة الجديدة
+                await update.message.reply_text(
+                    f"⚠️ <b>تنبيه للمشتركين:</b>\nهذا الحساب مرتبط بالفعل بقناة: (<code>{current_ch_name}</code>).\n\n"
+                    f"عليك حذف القناة المضافة أولاً لتتمكن من تغيير القناة.\n"
+                    f"💡 <i>(ميزة تعدد القنوات خاصة بالإدارة فقط)</i>",
+                    parse_mode='HTML'
+                )
+                await asyncio.sleep(1)
+                await clean_and_show_menu(update, context, uid)
+                return # الخروج دون إضافة قناة جديدة
 
+        # ✅ للأدمن (أو المشترك العادي إذا لم يملك قناة مسبقاً): يتم الحفظ بشكل طبيعي
+        database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
+        await update.message.reply_text("✅ تم ربط القناة بنجاح!")
+        await asyncio.sleep(1)
+        await clean_and_show_menu(update, context, uid)
+        return
         # 2. ✅ إذا لم توجد قناة، يتم الحفظ بشكل طبيعي
         database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
         await update.message.reply_text("✅ تم ربط القناة بنجاح!")
@@ -309,6 +317,18 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif data == 'add_channel':
             if is_owner or (user and user.get('is_activated')):
                 # 1. حذف الرسالة القديمة لتنظيف الشاشة
+        elif data == 'add_channel':
+            # السماح للأدمن دائماً، أو للمشترك النشط
+            if is_owner or (user and user.get('is_activated')):
+                
+                # فحص إضافي للمشترك العادي لمنعه من طلب زر التفويض إذا كان يملك قناة
+                if not is_owner:
+                    ents = database.get_user_entities(uid)
+                    if ents and len(ents) >= 1:
+                        await query.answer("⚠️ عذراً، يمكنك إضافة قناة واحدة فقط كحد أقصى!", show_alert=True)
+                        return
+
+                # 1. حذف الرسالة القديمة لتنظيف الشاشة
                 try: await query.message.delete()
                 except: pass
 
@@ -321,7 +341,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
             else:
                 await query.answer("⚠️ عذراً، هذه الميزة للمشتركين فقط.", show_alert=True)
-            re    # --- لوحة الأدمن (التحكم الكامل) ---
+            return
     if is_owner:
         if data == 'adm': # الإحصائيات
             # 1. جلب الإحصائيات كقاموس
