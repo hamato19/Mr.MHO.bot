@@ -316,7 +316,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         
         
-        elif data == 'add_channel':
+        
+       elif data == 'add_channel':
             # السماح للأدمن دائماً، أو للمشترك النشط
             if is_owner or (user and user.get('is_activated')):
                 
@@ -327,13 +328,13 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         await query.answer("⚠️ عذراً، يمكنك إضافة قناة واحدة فقط كحد أقصى!", show_alert=True)
                         return
 
-                # 1. استجابة سريعة للزر لمنع ظهور علامة التحميل (الساعة الرملية) المزعجة
+                # 1. استجابة سريعة للزر لمنع ظهور علامة التحميل (الساعة الرملية)
                 try:
                     await query.answer()
                 except:
                     pass
 
-                # 2. تعديل نص الرسالة الحالية لتنبيه المستخدم بالنظر لأسفل الشاشة (تجنباً لخطأ الحذف)
+                # 2. تعديل نص الرسالة الحالية لتنبيه المستخدم بالنظر لأسفل الشاشة
                 try:
                     await query.edit_message_text(
                         text="⏳ <b>جاري فتح معالج الربط...</b>\n\nالرجاء النظر إلى أسفل الشاشة واستخدام الكيبورد المظهر هناك لاختيار قناتك وتفويض البوت.",
@@ -342,12 +343,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except:
                     pass
 
-                # 3. إرسال رسالة مستقلة تماماً وهي المسؤولة عن إظهار الكيبورد السفلي بنجاح
+                # 3. إرسال رسالة مستقلة تماماً وتمرير الـ uid لحل مشكلة تعطل الزر والرفض
                 await context.bot.send_message(
                     chat_id=uid,
                     text="📢 <b>نظام ربط وتفويض القنوات المطور:</b>\n\nاضغط على الزر الأزرق الكبير بالأسفل واقرن قناتك ببوت الإشارات مباشرة.",
                     parse_mode='HTML',
-                    reply_markup=keyboards.get_request_channel_keyboard()
+                    reply_markup=keyboards.get_request_channel_keyboard(uid)
                 )
             else:
                 await query.answer("⚠️ عذراً، هذه الميزة للمشتركين فقط.", show_alert=True)
