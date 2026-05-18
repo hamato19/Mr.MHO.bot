@@ -127,10 +127,22 @@ def get_generation_menu():
 def get_request_channel_keyboard():
     """هذه الدالة تظهر كيبورد أسفل الشاشة لاختيار قناة"""
     return ReplyKeyboardMarkup([
-        [KeyboardButton("📢 اختر القناة التي تريد ربطها", request_chat=KeyboardButtonRequestChat(request_id=1, chat_is_channel=True))],
-        [KeyboardButton("🔙 إلغاء والعودة للقائمة")]
+        [
+            KeyboardButton(
+                text="📢 اختر القناة التي تريد ربطها", 
+                request_chat=KeyboardButtonRequestChat(
+                    request_id=1, 
+                    chat_is_channel=True,
+                    bot_is_member=True,  # تجبر المستخدم على إضافة البوت داخل القناة تلقائياً
+                    bot_rights={'can_post_messages': True} # تطلب صلاحية نشر الرسائل فوراً من المشرف لمنع خطأ Chat not found
+                )
+            )
+        ],
+        [KeyboardButton(text="🔙 إلغاء والعودة للقائمة")]
     ], resize_keyboard=True, one_time_keyboard=True)
+
 
 # --- دوال مساعدة ---
 def get_back_home():
+    """زر موحد للعودة للقائمة الرئيسية في أي وقت"""
     return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 العودة للقائمة", callback_data='home')]])
