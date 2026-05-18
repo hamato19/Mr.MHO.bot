@@ -56,9 +56,12 @@ async def clean_and_show_menu(update_or_query, context, uid):
 
 # --- 2. معالج الرسائل الموحد (نظام التفعيل المباشر والربط) ---
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message: return
+    if not update.message: 
+        return
+    
     uid = update.effective_user.id
-    if 'temp_msg_ids' not in context.user_data: context.user_data['temp_msg_ids'] = []
+    if 'temp_msg_ids' not in context.user_data: 
+        context.user_data['temp_msg_ids'] = []
     
     # تسجيل رسالة المستخدم للتنظيف
     context.user_data['temp_msg_ids'].append(update.message.message_id)
@@ -108,12 +111,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await asyncio.sleep(1.5)
                 await clean_and_show_menu(update, context, uid)
             return
-            #ب: التعامل مع ربط القنوات (Request Chat)
-        if update.message.chat_shared:
-             # 🚀 الفحص: إذا لم يكن أدمن، نتحقق من شرط القناة الواحدة
-             if str(uid) != str(config.ADMIN_ID):
-             existing_channels = database.get_user_entities(uid)
-             if existing_channels:
+
+    # ب: التعامل مع ربط القنوات (Request Chat)
+    if update.message.chat_shared:
+        # 🚀 الفحص: إذا لم يكن أدمن، نتحقق من شرط القناة الواحدة
+        if str(uid) != str(config.ADMIN_ID):
+            existing_channels = database.get_user_entities(uid)
+            if existing_channels:
                 current_ch_name = "قناة مضافة"
                 if isinstance(existing_channels[0], dict):
                     current_ch_name = existing_channels[0].get('entity_name', 'قناة مضافة')
@@ -135,12 +139,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return  # الخروج الآمن وبقاء زر العودة نشطاً للمستخدم
 
-               # ✅ للأدمن (أو المشترك العادي إذا لم يملك قناة مسبقاً): يتم الحفظ بشكل طبيعي
-               database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
-                await update.message.reply_text("✅ تم ربط القناة بنجاح!")
-                await asyncio.sleep(1.5)
-                await clean_and_show_menu(update, context, uid)
-              return
+        # ✅ للأدمن (أو المشترك العادي إذا لم يملك قناة مسبقاً): يتم الحفظ بشكل طبيعي
+        database.add_user_entity(uid, update.message.chat_shared.chat_id, "Channel")
+        await update.message.reply_text("✅ تم ربط القناة بنجاح!")
+        await asyncio.sleep(1.5)
+        await clean_and_show_menu(update, context, uid)
+        return
         
 # --- 3. معالج الأزرار التفاعلية (Callbacks) ---
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
