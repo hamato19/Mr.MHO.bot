@@ -314,9 +314,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         
-        elif data == 'add_channel':
-            if is_owner or (user and user.get('is_activated')):
-                # 1. حذف الرسالة القديمة لتنظيف الشاشة
+        
         elif data == 'add_channel':
             # السماح للأدمن دائماً، أو للمشترك النشط
             if is_owner or (user and user.get('is_activated')):
