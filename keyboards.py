@@ -147,38 +147,34 @@ def get_back_home():
 
 
 async def process_add_channel_logic(query, context, uid, is_owner, user, database):
-    """دالة مستقلة لمعالجة ربط القنوات معزولة داخل موديول الكيبورد لحل مشاكل السيرفر نهائياً"""
-    # السماح للأدمن دائماً، أو للمشترك النشط
-    if is_owner or (user and user.get('is_activated')):
-        
-        # فحص إضافي للمشترك العادي لمنعه من طلب زر التفويض إذا كان يملك قناة فعلاً
-        if not is_owner:
+    """نسخة اختبارية تكسر حاجز الشروط لتحديد مكان الخلل برمجياً"""
+    try:
+        await query.answer() # تفريغ النبضة فوراً
+    except:
+        pass
+
+    # فحص إذا كان المستخدم العادي تجاوز الحد لتنبيهه
+    if not is_owner:
+        try:
             ents = database.get_user_entities(uid)
             if ents and len(ents) >= 1:
-                await query.answer("⚠️ عذراً، يمكنك إضافة قناة واحدة فقط كحد أقصى!", show_alert=True)
+                await query.edit_message_text("⚠️ عذراً، يمكنك إضافة قناة واحدة فقط كحد أقصى!")
                 return
+        except Exception as db_err:
+            logger.error(f"Database check failed: {db_err}")
 
-        # 1. استجابة سريعة للزر لتفادي الساعة الرملية المعلقة
-        try:
-            await query.answer()
-        except:
-            pass
-
-        # 2. تعديل نص الرسالة الحالية لتوجيه المستخدم للنظر بالأسفل
-        try:
-            await query.edit_message_text(
-                text="⏳ <b>جاري فتح معالج الربط...</b>\n\nالرجاء النظر إلى أسفل الشاشة واستخدام الكيبورد المظهر هناك لاختيار قناتك وتفويض البوت.",
-                parse_mode='HTML'
-            )
-        except:
-            pass
-
-        # 3. إرسال الكيبورد الخاص بطلب تفويض القناة وتمرير الـ uid كمعرف فريد
+    # إرسال واجهة الربط مباشرة بدون فحص قيد التفعيل مؤقتاً لغرض الفحص
+    try:
+        await query.edit_message_text(
+            text="⏳ <b>جاري فتح معالج الربط...</b>\n\nالرجاء النظر إلى أسفل الشاشة واستخدم الكيبورد المظهر هناك لاختيار قناتك.",
+            parse_mode='HTML'
+        )
+        
         await context.bot.send_message(
             chat_id=uid,
-            text="📢 <b>نظام ربط وتفويض القنوات المطور:</b>\n\nاضغط على الزر الأزرق الكبير بالأسفل واقرن قناتك ببوت الإشارات مباشرة.",
+            text="📢 <b>نظام ربط وتفويض القنوات المطور:</b>\n\nاضغط على الزر بالأسفل واقرن قناتك ببوت الإشارات.",
             parse_mode='HTML',
             reply_markup=get_request_channel_keyboard(uid)
         )
-    else:
-        await query.answer("⚠️ عذراً، هذه الميزة للمشتركين فقط.", show_alert=True)
+    except Exception as send_err:
+        logger.error(f"Failed to send request channel markup: {send_err}")
