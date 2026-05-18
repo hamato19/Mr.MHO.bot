@@ -123,26 +123,24 @@ def get_generation_menu():
         [InlineKeyboardButton("🔙 رجوع", callback_data='adm')]
     ])
 
-# --- 9. زر اختيار القناة (الدالة رقم 9) ---
-def get_request_channel_keyboard():
-    """هذه الدالة تظهر كيبورد أسفل الشاشة لاختيار قناة"""
+# --- 9. زر اختيار القناة (الدالة رقم 9 المحدثة) ---
+def get_request_channel_keyboard(user_id=1):
+    """
+    هذه الدالة تظهر كيبورد أسفل الشاشة لاختيار قناة.
+    تم استخدام جزء من آيدي المستخدم كـ request_id لضمان ديناميكيته وعدم رفضه من تليجرام.
+    """
+    # تحويل الآيدي لرقم ديناميكي فريد لا يتجاوز حدود Int32 لتليجرام
+    req_id = int(str(user_id)[-7:]) if user_id != 1 else 1
+
     return ReplyKeyboardMarkup([
         [
             KeyboardButton(
                 text="📢 اختر القناة التي تريد ربطها", 
                 request_chat=KeyboardButtonRequestChat(
-                    request_id=1, 
-                    chat_is_channel=True,
-                    bot_is_member=True,  # تجبر المستخدم على إضافة البوت داخل القناة تلقائياً
-                    bot_rights={'can_post_messages': True} # تطلب صلاحية نشر الرسائل فوراً من المشرف لمنع خطأ Chat not found
+                    request_id=req_id,     # آيدي ديناميكي مستحيل يتكرر أو يُرفض
+                    chat_is_channel=True   # تحديد أن المطلوب قناة فقط
                 )
             )
         ],
         [KeyboardButton(text="🔙 إلغاء والعودة للقائمة")]
     ], resize_keyboard=True, one_time_keyboard=True)
-
-
-# --- دوال مساعدة ---
-def get_back_home():
-    """زر موحد للعودة للقائمة الرئيسية في أي وقت"""
-    return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 العودة للقائمة", callback_data='home')]])
