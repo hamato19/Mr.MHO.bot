@@ -8,7 +8,6 @@ from telegram import (
     KeyboardButtonRequestChat
 )
 
-# إعداد اللوج لإصلاح الأخطاء
 logger = logging.getLogger(__name__)
 
 # --- 1. واجهة الخصوصية ---
@@ -123,24 +122,25 @@ def get_generation_menu():
         [InlineKeyboardButton("🔙 رجوع", callback_data='adm')]
     ])
 
-# --- 9. زر اختيار القناة (الدالة رقم 9 المحدثة) ---
+# --- 9. زر اختيار القناة المطور والديناميكي ---
 def get_request_channel_keyboard(user_id=1):
-    """
-    هذه الدالة تظهر كيبورد أسفل الشاشة لاختيار قناة.
-    تم استخدام جزء من آيدي المستخدم كـ request_id لضمان ديناميكيته وعدم رفضه من تليجرام.
-    """
-    # تحويل الآيدي لرقم ديناميكي فريد لا يتجاوز حدود Int32 لتليجرام
+    """هذه الدالة تظهر كيبورد أسفل الشاشة لاختيار قناة مع الحفاظ على آيدي طلب فريد"""
     req_id = int(str(user_id)[-7:]) if user_id != 1 else 1
-
     return ReplyKeyboardMarkup([
         [
             KeyboardButton(
                 text="📢 اختر القناة التي تريد ربطها", 
                 request_chat=KeyboardButtonRequestChat(
-                    request_id=req_id,     # آيدي ديناميكي مستحيل يتكرر أو يُرفض
-                    chat_is_channel=True   # تحديد أن المطلوب قناة فقط
+                    request_id=req_id, 
+                    chat_is_channel=True
                 )
             )
         ],
         [KeyboardButton(text="🔙 إلغاء والعودة للقائمة")]
     ], resize_keyboard=True, one_time_keyboard=True)
+
+
+# --- دوال مساعدة ---
+def get_back_home():
+    """زر موحد للعودة للقائمة الرئيسية في أي وقت"""
+    return InlineKeyboardMarkup([[InlineKeyboardButton("🏠 العودة للقائمة", callback_data='home')]])
